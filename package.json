@@ -1,0 +1,18 @@
+{
+  "name": "ghana-courier-platform",
+  "private": true,
+  "packageManager": "pnpm@10.28.0",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "pnpm -r --if-present test",
+    "test:rules": "pnpm --filter @courier/rules-tests test:emulator",
+    "build": "pnpm -r --if-present build",
+    "dev:web": "pnpm --filter @courier/web dev",
+    "dev:worker": "pnpm --filter @courier/api-edge dev"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.0"
+  }
+}

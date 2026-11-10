@@ -1,0 +1,29 @@
+[
+  {
+    "id": "accra",
+    "name": "Greater Accra (Accra–Tema)",
+    "city": "Accra",
+    "region": "Greater Accra",
+    "center": { "lat": 5.6037, "lng": -0.187 },
+    "radiusKm": 35,
+    "active": true
+  },
+  {
+    "id": "kumasi",
+    "name": "Kumasi Metropolitan",
+    "city": "Kumasi",
+    "region": "Ashanti",
+    "center": { "lat": 6.6885, "lng": -1.6244 },
+    "radiusKm": 25,
+    "active": true
+  },
+  {
+    "id": "takoradi",
+    "name": "Sekondi-Takoradi",
+    "city": "Takoradi",
+    "region": "Western",
+    "center": { "lat": 4.9016, "lng": -1.7831 },
+    "radiusKm": 20,
+    "active": true
+  }
+]
