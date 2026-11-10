@@ -144,6 +144,9 @@ importers:
       '@courier/shared-types':
         specifier: workspace:*
         version: link:../shared-types
+      '@courier/shared-utils':
+        specifier: workspace:*
+        version: link:../shared-utils
       zod:
         specifier: ^4.1.0
         version: 4.6.7

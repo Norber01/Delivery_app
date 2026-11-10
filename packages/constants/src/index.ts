@@ -115,7 +115,21 @@ export const GHANA_BOUNDS = { minLat: 4.5, maxLat: 11.3, minLng: -3.4, maxLng: 1
 /** Ghana mobile network prefixes (after the leading 0 / +233). */
 export const GHANA_MOBILE_PREFIXES = ['20', '23', '24', '25', '26', '27', '28', '50', '53', '54', '55', '56', '57', '59'] as const;
 
+/** Lifecycle of a single payment attempt (`payments/{id}.status`). */
+export const PAYMENT_RECORD_STATUSES = ['initiated', 'pending', 'succeeded', 'failed', 'flagged', 'expired'] as const;
+export type PaymentRecordStatus = (typeof PAYMENT_RECORD_STATUSES)[number];
+
+export const REFUND_STATUSES = ['pending', 'processed', 'failed'] as const;
+export type RefundStatus = (typeof REFUND_STATUSES)[number];
+
+/** Payment preferences settled online through the payment provider. */
+export const ONLINE_PAYMENT_PREFERENCES = ['mobile_money', 'card'] as const satisfies readonly PaymentPreference[];
+
 export const QUOTE_TTL_MINUTES = 30;
+/** Pending online payments are re-verified with the provider after this long. */
+export const PAYMENT_RECONCILE_AFTER_MINUTES = 15;
+/** Unpaid online attempts older than this are marked expired. */
+export const PAYMENT_EXPIRE_AFTER_HOURS = 24;
 export const FIREBASE_REGION = 'europe-west1';
 
 export const COLLECTIONS = {
@@ -141,6 +155,7 @@ export const COLLECTIONS = {
   deliveryRoutes: 'deliveryRoutes',
   payments: 'payments',
   paymentEvents: 'paymentEvents',
+  refunds: 'refunds',
   invoices: 'invoices',
   proofOfDelivery: 'proofOfDelivery',
   notifications: 'notifications',
@@ -168,5 +183,12 @@ export const ERROR_CODES = [
   'PAYMENT_METHOD_NOT_ALLOWED',
   'PERMISSION_DENIED',
   'MFA_REQUIRED',
+  'BOOKING_NOT_FOUND',
+  'ALREADY_PAID',
+  'PAYMENT_NOT_REQUIRED',
+  'PAYMENT_PROVIDER_ERROR',
+  'PAYMENT_NOT_FOUND',
+  'REFUND_NOT_ALLOWED',
+  'BOOKING_ALREADY_CLAIMED',
 ] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number];

@@ -34,7 +34,10 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly(['savedAddresses', 'notificationPrefs', 'marketingOptIn', 'defaultPaymentPreference'])
         && (!('savedAddresses' in request.resource.data) || (request.resource.data.savedAddresses is list && request.resource.data.savedAddresses.size() <= 20))
         && (!('marketingOptIn' in request.resource.data) || request.resource.data.marketingOptIn is bool)
-        && (!('defaultPaymentPreference' in request.resource.data) || request.resource.data.defaultPaymentPreference in ['mobile_money', 'card', 'cash_on_pickup']);
+        && (!('defaultPaymentPreference' in request.resource.data) || request.resource.data.defaultPaymentPreference in ['mobile_money', 'card', 'cash_on_pickup'])
+        && (!('notificationPrefs' in request.resource.data) || (
+              request.resource.data.notificationPrefs is map
+              && request.resource.data.notificationPrefs.keys().hasOnly(['smsBookingUpdates', 'smsPaymentReceipts', 'emailReceipts'])));
       allow delete: if false;
     }
 
@@ -82,6 +85,11 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    match /refunds/{id} {
+      allow read: if staffIn(['finance', 'admin', 'super_admin']);
+      allow write: if false;
+    }
+
     match /invoices/{id} {
       allow read: if (role() == 'business_owner' && isBusinessMember(resource.data.businessId))
         || staffIn(['finance', 'admin', 'super_admin']);
@@ -93,7 +101,8 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Server-only: quotes, rate limits, raw payment events, POD secrets and
+    // Server-only: quotes, rate limits, raw payment events, tracking events (served through
+    // getTrackingView so guests and recipients see only public messages), notifications, POD secrets and
     // every collection not listed above fall through to deny.
     match /{document=**} {
       allow read, write: if false;

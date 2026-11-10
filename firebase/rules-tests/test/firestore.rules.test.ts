@@ -108,3 +108,40 @@ describe('server-only and restricted collections', () => {
     await assertFails(setDoc(doc(as('alice', { role: 'customer' }), 'anything/x'), { a: 1 }));
   });
 });
+
+describe('Phase 2: accounts, payments, tracking', () => {
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await setDoc(doc(db, 'refunds/r1'), { paymentId: 'p1', amountPesewas: 100 });
+      await setDoc(doc(db, 'trackingEvents/e1'), { trackingNumber: 'GHALICE', publicMessage: 'Booking received' });
+      await setDoc(doc(db, 'notifications/n1'), { recipientPhone: '+233241234567', body: 'hi' });
+      await setDoc(doc(db, 'paymentEvents/x'), { paymentId: 'p1' });
+    });
+  });
+
+  it('customers can list only their own bookings', async () => {
+    const { collection, query, where, getDocs } = await import('firebase/firestore');
+    const db = as('alice', { role: 'customer' });
+    await assertSucceeds(getDocs(query(collection(db, 'deliveryRequests'), where('customerUid', '==', 'alice'))));
+    await assertFails(getDocs(query(collection(db, 'deliveryRequests'), where('customerUid', '==', 'bob'))));
+    await assertFails(getDocs(collection(db, 'deliveryRequests')));
+  });
+
+  it('customers can list their payments but not refunds, events, notifications or webhook records', async () => {
+    const { collection, query, where, getDocs } = await import('firebase/firestore');
+    const db = as('alice', { role: 'customer' });
+    await assertSucceeds(getDocs(query(collection(db, 'payments'), where('customerUid', '==', 'alice'))));
+    await assertFails(getDoc(doc(db, 'refunds/r1')));
+    await assertFails(getDoc(doc(db, 'trackingEvents/e1')));
+    await assertFails(getDoc(doc(db, 'notifications/n1')));
+    await assertFails(getDoc(doc(db, 'paymentEvents/x')));
+    await assertSucceeds(getDoc(doc(as('f', { role: 'finance', ...mfa }), 'refunds/r1')));
+  });
+
+  it('notification preferences accept only known keys', async () => {
+    const db = as('alice', { role: 'customer' });
+    await assertSucceeds(setDoc(doc(db, 'customers/alice'), { notificationPrefs: { smsBookingUpdates: false, smsPaymentReceipts: true, emailReceipts: false } }));
+    await assertFails(setDoc(doc(db, 'customers/alice'), { notificationPrefs: { isAdmin: true } }));
+  });
+});

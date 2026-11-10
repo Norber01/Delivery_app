@@ -30,7 +30,7 @@ describe('tracking numbers', () => {
   it('generates valid, well-formed numbers', () => {
     for (let i = 0; i < 200; i++) {
       const t = generateTrackingNumber();
-      expect(t).toMatch(/^GH[0-9A-HJKMNP-TV-Z]{10}[0-9A-HJKMNP-TV-Z*~$=U]$/);
+      expect(t).toMatch(/^GH[0-9A-HJKMNP-TV-Z]{12}$/);
       expect(isValidTrackingNumber(t)).toBe(true);
     }
   });
@@ -43,9 +43,31 @@ describe('tracking numbers', () => {
     const spaced = `${t.slice(0, 2)} ${t.slice(2, 7)}-${t.slice(7)}`.toLowerCase();
     expect(normalizeTrackingNumber(spaced)).toBe(t);
     const body = t.slice(2, 12);
-    const typo = `GH${body.slice(0, 3)}${body[3] === 'A' ? 'B' : 'A'}${body.slice(4)}${t.at(-1)}`;
+    const check = t.slice(12);
+    const typo = `GH${body.slice(0, 3)}${body[3] === 'A' ? 'B' : 'A'}${body.slice(4)}${check}`;
     expect(normalizeTrackingNumber(typo)).toBeNull();
     expect(normalizeTrackingNumber('XX123')).toBeNull();
+  });
+});
+
+describe('tracking number check symbols', () => {
+  const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+  it('detect every single substitution and adjacent transposition', () => {
+    for (let n = 0; n < 40; n++) {
+      const t = generateTrackingNumber();
+      const body = t.slice(2, 12);
+      const check = t.slice(12);
+      for (let i = 0; i < 10; i++) {
+        for (const c of ALPHABET) {
+          if (c === body[i]) continue;
+          expect(normalizeTrackingNumber(`GH${body.slice(0, i)}${c}${body.slice(i + 1)}${check}`)).toBeNull();
+        }
+        if (i < 9 && body[i] !== body[i + 1]) {
+          const swapped = body.slice(0, i) + body[i + 1] + body[i] + body.slice(i + 2);
+          expect(normalizeTrackingNumber(`GH${swapped}${check}`)).toBeNull();
+        }
+      }
+    }
   });
 });
 

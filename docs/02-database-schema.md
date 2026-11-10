@@ -70,7 +70,7 @@ Short-lived (TTL 30 min). `input` (validated `QuoteRequest`), `result` (`PriceQu
 ### `deliveryRequests/{id}` (bookings) — W: S
 | Field | Notes |
 |---|---|
-| trackingNumber | `GH` + 10 chars Crockford base32 + check char, unique, indexed |
+| trackingNumber | `GH` + 10 random Crockford base32 chars + 2 check chars (mod 1021), alphanumeric, unique (doc ID) |
 | customerUid? / businessId? | null for guest bookings |
 | sender, recipient | `Contact { name, phone, email? }` |
 | pickup, destination | `Address { line1, line2?, city, region, landmark?, ghanaPostGps?, location }` |

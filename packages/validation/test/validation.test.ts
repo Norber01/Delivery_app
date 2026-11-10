@@ -136,3 +136,22 @@ describe('null handling (Firebase callable encodes undefined as null)', () => {
     expect('line2' in a.pickup && a.pickup.line2 !== undefined).toBe(false);
   });
 });
+
+describe('account & access schemas', async () => {
+  const { bookingAccessSchema, refundRequestSchema } = await import('../src/index.js');
+  const { generateTrackingNumber } = await import('@courier/shared-utils');
+  it('normalises tracking numbers and rejects typos', () => {
+    const t = generateTrackingNumber();
+    expect(bookingAccessSchema.parse({ trackingNumber: t.toLowerCase(), accessToken: null })).toEqual({ trackingNumber: t, accessToken: undefined });
+    expect(bookingAccessSchema.safeParse({ trackingNumber: 'GH123' }).success).toBe(false);
+  });
+  it('validates guest access tokens', () => {
+    const t = generateTrackingNumber();
+    expect(bookingAccessSchema.safeParse({ trackingNumber: t, accessToken: 'x'.repeat(32) }).success).toBe(true);
+    expect(bookingAccessSchema.safeParse({ trackingNumber: t, accessToken: 'bad token' }).success).toBe(false);
+  });
+  it('requires positive integer refunds with a reason', () => {
+    expect(refundRequestSchema.safeParse({ paymentReference: 'GHABC-12345', amountPesewas: 0, reason: 'Customer cancelled' }).success).toBe(false);
+    expect(refundRequestSchema.safeParse({ paymentReference: 'GHABC-12345', amountPesewas: 100, reason: 'Customer cancelled' }).success).toBe(true);
+  });
+});

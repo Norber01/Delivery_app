@@ -1,7 +1,23 @@
 import { COLLECTIONS } from '@courier/constants';
 import type { ContractTerms, DeliveryRequestDoc, PricingRuleSet, ServiceArea } from '@courier/shared-types';
-import { FieldValue, Timestamp, type Firestore } from 'firebase-admin/firestore';
-import type { AuditEntry, BusinessAccount, CreateBookingOutcome, RateLimiter, Store, StoredQuote } from './types.js';
+import { FieldValue, Timestamp, type DocumentReference, type Firestore, type Transaction } from 'firebase-admin/firestore';
+import type {
+  AuditEntry,
+  BookingRecord,
+  BusinessAccount,
+  CreateBookingOutcome,
+  Mutation,
+  MutationOutcome,
+  NewNotification,
+  NotificationRecord,
+  PaymentRecord,
+  RateLimiter,
+  RefundRecord,
+  Store,
+  StoredQuote,
+  TrackingEventRecord,
+  UserProfileInput,
+} from './types.js';
 
 const CACHE_MS = 5 * 60_000;
 
@@ -20,6 +36,23 @@ class Cached<T> {
 }
 
 const toDate = (v: unknown): Date => (v instanceof Timestamp ? v.toDate() : (v as Date));
+
+/** Deep-convert Firestore Timestamps to Dates (top-level and nested plain objects). */
+function fromDoc<T>(data: FirebaseFirestore.DocumentData): T {
+  const conv = (v: unknown): unknown => {
+    if (v instanceof Timestamp) return v.toDate();
+    if (Array.isArray(v)) return v.map(conv);
+    if (v && typeof v === 'object' && Object.getPrototypeOf(v) === Object.prototype) {
+      return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, conv(x)]));
+    }
+    return v;
+  };
+  return conv(data) as T;
+}
+
+function notificationDoc(n: NewNotification) {
+  return { ...n, status: 'queued', attempts: 0, providerMessageId: null, error: null, createdAt: FieldValue.serverTimestamp() };
+}
 
 export class FirestoreStore implements Store {
   private readonly rules: Cached<PricingRuleSet | null>;
@@ -89,7 +122,12 @@ export class FirestoreStore implements Store {
     return { ...(d as StoredQuote), createdAt: toDate(d.createdAt), expiresAt: toDate(d.expiresAt) };
   }
 
-  async createBooking(booking: DeliveryRequestDoc, quoteId: string, audit: AuditEntry): Promise<CreateBookingOutcome> {
+  async createBooking(
+    booking: DeliveryRequestDoc,
+    quoteId: string,
+    audit: AuditEntry,
+    extras: { events?: TrackingEventRecord[]; notifications?: NewNotification[] } = {},
+  ): Promise<CreateBookingOutcome> {
     const quoteRef = this.db.collection(COLLECTIONS.quotes).doc(quoteId);
     const bookingRef = this.db.collection(COLLECTIONS.deliveryRequests).doc(booking.trackingNumber);
     const auditRef = this.db.collection(COLLECTIONS.auditLogs).doc();
@@ -106,6 +144,8 @@ export class FirestoreStore implements Store {
       });
       tx.update(quoteRef, { usedByTrackingNumber: booking.trackingNumber });
       tx.create(auditRef, { ...audit, at: FieldValue.serverTimestamp() });
+      for (const e of extras.events ?? []) tx.create(this.db.collection(COLLECTIONS.trackingEvents).doc(), e);
+      for (const n of extras.notifications ?? []) tx.create(this.db.collection(COLLECTIONS.notifications).doc(), notificationDoc(n));
       return 'created';
     });
   }
@@ -144,6 +184,209 @@ export class FirestoreStore implements Store {
 
   async writeAudit(entry: AuditEntry): Promise<void> {
     await this.db.collection(COLLECTIONS.auditLogs).add({ ...entry, at: FieldValue.serverTimestamp() });
+  }
+
+  // ---- Bookings & tracking ----------------------------------------------
+
+  private bookingRef(trackingNumber: string) {
+    return this.db.collection(COLLECTIONS.deliveryRequests).doc(trackingNumber);
+  }
+
+  async getBooking(trackingNumber: string): Promise<BookingRecord | null> {
+    const snap = await this.bookingRef(trackingNumber).get();
+    return snap.exists ? fromDoc<BookingRecord>(snap.data()!) : null;
+  }
+
+  async listTrackingEvents(trackingNumber: string): Promise<TrackingEventRecord[]> {
+    const snap = await this.db
+      .collection(COLLECTIONS.trackingEvents)
+      .where('trackingNumber', '==', trackingNumber)
+      .orderBy('occurredAt', 'asc')
+      .limit(100)
+      .get();
+    return snap.docs.map((d) => fromDoc<TrackingEventRecord>(d.data()));
+  }
+
+  async claimBooking(trackingNumber: string, uid: string, audit: AuditEntry) {
+    const ref = this.bookingRef(trackingNumber);
+    return this.db.runTransaction(async (tx) => {
+      // All reads first (Firestore transactions forbid reads after writes).
+      const [snap, payments] = await Promise.all([
+        tx.get(ref),
+        tx.get(this.db.collection(COLLECTIONS.payments).where('trackingNumber', '==', trackingNumber)),
+      ]);
+      if (!snap.exists) return 'not_found' as const;
+      const owner = snap.get('customerUid') as string | null;
+      if (owner === uid) return 'claimed' as const;
+      if (owner) return 'already_owned' as const;
+      tx.update(ref, { customerUid: uid, updatedAt: FieldValue.serverTimestamp() });
+      // Keep payment records' owner in sync so the customer can read them (rules use customerUid).
+      payments.docs.forEach((d) => tx.update(d.ref, { customerUid: uid }));
+      tx.create(this.db.collection(COLLECTIONS.auditLogs).doc(), { ...audit, at: FieldValue.serverTimestamp() });
+      return 'claimed' as const;
+    });
+  }
+
+  // ---- Payments -----------------------------------------------------------
+
+  private paymentRef(id: string) {
+    return this.db.collection(COLLECTIONS.payments).doc(id);
+  }
+
+  async createPayment(p: PaymentRecord): Promise<void> {
+    await this.paymentRef(p.id).create(p);
+  }
+
+  async getPayment(id: string): Promise<PaymentRecord | null> {
+    const snap = await this.paymentRef(id).get();
+    return snap.exists ? fromDoc<PaymentRecord>(snap.data()!) : null;
+  }
+
+  async listPaymentsForBooking(trackingNumber: string): Promise<PaymentRecord[]> {
+    const snap = await this.db
+      .collection(COLLECTIONS.payments)
+      .where('trackingNumber', '==', trackingNumber)
+      .orderBy('createdAt', 'desc')
+      .limit(20)
+      .get();
+    return snap.docs.map((d) => fromDoc<PaymentRecord>(d.data()));
+  }
+
+  async listPaymentsToReconcile(createdBefore: Date, limit: number): Promise<PaymentRecord[]> {
+    const snap = await this.db
+      .collection(COLLECTIONS.payments)
+      .where('status', 'in', ['initiated', 'pending'])
+      .where('createdAt', '<', Timestamp.fromDate(createdBefore))
+      .orderBy('createdAt', 'asc')
+      .limit(limit)
+      .get();
+    return snap.docs.map((d) => fromDoc<PaymentRecord>(d.data()));
+  }
+
+  async updatePayment(id: string, patch: Partial<PaymentRecord>): Promise<void> {
+    await this.paymentRef(id).update(patch);
+  }
+
+  /** Writes a computed mutation inside an open transaction (after all reads). */
+  private writeMutation(
+    tx: Transaction,
+    m: Mutation,
+    refs: { payment?: DocumentReference; refund?: DocumentReference; booking: DocumentReference },
+  ) {
+    if (m.payment && refs.payment && Object.keys(m.payment).length) tx.update(refs.payment, m.payment);
+    if (m.refund && refs.refund && Object.keys(m.refund).length) tx.update(refs.refund, m.refund);
+    if (m.booking && Object.keys(m.booking).length) tx.update(refs.booking, { ...m.booking, updatedAt: FieldValue.serverTimestamp() });
+    for (const e of m.events ?? []) tx.create(this.db.collection(COLLECTIONS.trackingEvents).doc(), e);
+    for (const n of m.notifications ?? []) tx.create(this.db.collection(COLLECTIONS.notifications).doc(), notificationDoc(n));
+    for (const a of m.audit ?? []) tx.create(this.db.collection(COLLECTIONS.auditLogs).doc(), { ...a, at: FieldValue.serverTimestamp() });
+  }
+
+  async applyPaymentMutation(
+    paymentId: string,
+    eventKey: string | null,
+    decide: (payment: PaymentRecord, booking: BookingRecord) => Mutation,
+  ): Promise<MutationOutcome> {
+    const paymentRef = this.paymentRef(paymentId);
+    const eventRef = eventKey ? this.db.collection(COLLECTIONS.paymentEvents).doc(eventKey) : null;
+    return this.db.runTransaction(async (tx) => {
+      if (eventRef && (await tx.get(eventRef)).exists) return 'duplicate_event';
+      const pSnap = await tx.get(paymentRef);
+      if (!pSnap.exists) return 'not_found';
+      const payment = fromDoc<PaymentRecord>(pSnap.data()!);
+      const bookingRef = this.bookingRef(payment.trackingNumber);
+      const bSnap = await tx.get(bookingRef);
+      if (!bSnap.exists) return 'not_found';
+      const m = decide(payment, fromDoc<BookingRecord>(bSnap.data()!));
+      this.writeMutation(tx, m, { payment: paymentRef, booking: bookingRef });
+      if (eventRef) tx.create(eventRef, { paymentId, processedAt: FieldValue.serverTimestamp() });
+      return 'applied';
+    });
+  }
+
+  // ---- Refunds ------------------------------------------------------------
+
+  private refundRef(id: string) {
+    return this.db.collection(COLLECTIONS.refunds).doc(id);
+  }
+
+  async reserveRefund(refund: RefundRecord) {
+    const paymentRef = this.paymentRef(refund.paymentId);
+    return this.db.runTransaction(async (tx) => {
+      const snap = await tx.get(paymentRef);
+      if (!snap.exists) return 'not_found' as const;
+      const p = fromDoc<PaymentRecord>(snap.data()!);
+      const available = p.amountPesewas - p.refundedPesewas - p.refundPendingPesewas;
+      if (p.status !== 'succeeded' || refund.amountPesewas > available) return 'insufficient' as const;
+      tx.update(paymentRef, { refundPendingPesewas: p.refundPendingPesewas + refund.amountPesewas, updatedAt: refund.createdAt });
+      tx.create(this.refundRef(refund.id), refund);
+      return 'reserved' as const;
+    });
+  }
+
+  async getRefund(id: string): Promise<RefundRecord | null> {
+    const snap = await this.refundRef(id).get();
+    return snap.exists ? fromDoc<RefundRecord>(snap.data()!) : null;
+  }
+
+  async findRefundByProviderId(providerRefundId: string): Promise<RefundRecord | null> {
+    const snap = await this.db.collection(COLLECTIONS.refunds).where('providerRefundId', '==', providerRefundId).limit(1).get();
+    return snap.empty ? null : fromDoc<RefundRecord>(snap.docs[0]!.data());
+  }
+
+  async listPendingRefunds(limit: number): Promise<RefundRecord[]> {
+    const snap = await this.db.collection(COLLECTIONS.refunds).where('status', '==', 'pending').limit(limit).get();
+    return snap.docs.map((d) => fromDoc<RefundRecord>(d.data()));
+  }
+
+  async applyRefundMutation(
+    refundId: string,
+    eventKey: string | null,
+    decide: (refund: RefundRecord, payment: PaymentRecord, booking: BookingRecord) => Mutation,
+  ): Promise<MutationOutcome> {
+    const refundRef = this.refundRef(refundId);
+    const eventRef = eventKey ? this.db.collection(COLLECTIONS.paymentEvents).doc(eventKey) : null;
+    return this.db.runTransaction(async (tx) => {
+      if (eventRef && (await tx.get(eventRef)).exists) return 'duplicate_event';
+      const rSnap = await tx.get(refundRef);
+      if (!rSnap.exists) return 'not_found';
+      const refund = fromDoc<RefundRecord>(rSnap.data()!);
+      const paymentRef = this.paymentRef(refund.paymentId);
+      const bookingRef = this.bookingRef(refund.trackingNumber);
+      const [pSnap, bSnap] = await Promise.all([tx.get(paymentRef), tx.get(bookingRef)]);
+      if (!pSnap.exists || !bSnap.exists) return 'not_found';
+      const m = decide(refund, fromDoc<PaymentRecord>(pSnap.data()!), fromDoc<BookingRecord>(bSnap.data()!));
+      this.writeMutation(tx, m, { payment: paymentRef, refund: refundRef, booking: bookingRef });
+      if (eventRef) tx.create(eventRef, { refundId, processedAt: FieldValue.serverTimestamp() });
+      return 'applied';
+    });
+  }
+
+  // ---- Accounts & notifications --------------------------------------------
+
+  async upsertUserProfile(p: UserProfileInput): Promise<void> {
+    const batch = this.db.batch();
+    batch.set(
+      this.db.collection(COLLECTIONS.users).doc(p.uid),
+      { ...p, status: 'active', createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() },
+      { merge: true },
+    );
+    batch.set(
+      this.db.collection(COLLECTIONS.customers).doc(p.uid),
+      { notificationPrefs: { smsBookingUpdates: true, smsPaymentReceipts: true, emailReceipts: false } },
+      { merge: true },
+    );
+    await batch.commit();
+  }
+
+  async queueNotification(n: NewNotification): Promise<void> {
+    await this.db.collection(COLLECTIONS.notifications).add(notificationDoc(n));
+  }
+
+  async updateNotification(id: string, patch: Partial<NotificationRecord>): Promise<void> {
+    await this.db
+      .collection(COLLECTIONS.notifications)
+      .doc(id)
+      .update({ ...patch, updatedAt: FieldValue.serverTimestamp(), ...(patch.status === 'sent' ? { sentAt: FieldValue.serverTimestamp() } : {}) });
   }
 }
 

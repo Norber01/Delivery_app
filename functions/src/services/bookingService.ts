@@ -1,10 +1,11 @@
 import type { BookingStatus, PaymentStatus } from '@courier/constants';
 import type { CreateBookingResponse, DeliveryRequestDoc } from '@courier/shared-types';
-import { generateTrackingNumber } from '@courier/shared-utils';
+import { formatGhs, generateTrackingNumber } from '@courier/shared-utils';
 import { createBookingRequestSchema, issuesToFieldErrors, type ValidCreateBookingRequest } from '@courier/validation';
 import type { Caller } from '../lib/auth.js';
 import { AppError } from '../lib/errors.js';
 import { hashObject, randomToken, sha256Hex } from '../lib/hash.js';
+import { renderSms } from '../notifications/sms.js';
 import { enforceRateLimit, rateKey, type RequestMeta, type ServiceDeps } from './quoteService.js';
 
 export const BOOKING_RATE_LIMIT = { limit: 10, windowSeconds: 3600 };
@@ -13,6 +14,8 @@ const MAX_TRACKING_ATTEMPTS = 5;
 export interface BookingDeps extends Omit<ServiceDeps, 'maps' | 'newId'> {
   newTrackingNumber?: () => string;
   newGuestToken?: () => string;
+  /** When present, booking SMS confirmations are queued. */
+  site?: { publicUrl: string; companyName: string };
 }
 
 /**
@@ -105,6 +108,34 @@ export async function createBooking(
       deliveryId: null,
       source: isBusiness ? 'business_portal' : 'web',
     };
+    const now = deps.now();
+    const events = [
+      {
+        trackingNumber,
+        deliveryId: null,
+        type: 'booking_created',
+        publicMessage: status === 'pending_payment' ? 'Booking received — awaiting payment' : 'Booking received',
+        actorUid: caller.uid,
+        actorRole: caller.role ?? ('guest' as const),
+        occurredAt: now,
+      },
+    ];
+    const notifications = deps.site
+      ? [
+          {
+            channel: 'sms' as const,
+            recipientPhone: req.sender.phone,
+            template: status === 'pending_payment' ? 'booking_pending_payment' : 'booking_created',
+            trackingNumber,
+            body: renderSms(status === 'pending_payment' ? 'booking_pending_payment' : 'booking_created', {
+              trackingNumber,
+              companyName: deps.site.companyName,
+              amount: formatGhs(quote.result.totalPesewas),
+              trackUrl: `${deps.site.publicUrl}/track/${trackingNumber}`,
+            }),
+          },
+        ]
+      : [];
     const outcome = await deps.store.createBooking(doc, quote.id, {
       actorUid: caller.uid,
       actorRole: caller.role ?? 'guest',
@@ -113,7 +144,7 @@ export async function createBooking(
       targetId: trackingNumber,
       after: { totalPesewas: quote.result.totalPesewas, pricingVersion: quote.result.pricingVersion, paymentPreference: req.paymentPreference },
       ipHash: meta.ipHash,
-    });
+    }, { events, notifications });
     switch (outcome) {
       case 'created':
         return { trackingNumber, guestAccessToken: guestToken, status, paymentStatus, totalPesewas: quote.result.totalPesewas };
