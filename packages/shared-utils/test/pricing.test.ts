@@ -60,6 +60,8 @@ describe('intra-city pricing', () => {
     expect(amounts(q)).toEqual({ TRANSPORT: 2500, DISTANCE: 990 });
     expect(q.totalPesewas).toBe(3490);
     expect(q.pricingVersion).toBe(3);
+    expect(Object.is(q.discountPesewas, 0)).toBe(true); // never -0
+
   });
 
   it('upgrades the vehicle for heavier loads and applies weight, urgency and handling fees', () => {

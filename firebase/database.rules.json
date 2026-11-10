@@ -1,0 +1,28 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "driverLocations": {
+      ".read": "auth != null && auth.token.firebase.sign_in_second_factor != null && (auth.token.role === 'dispatcher' || auth.token.role === 'hub_operator' || auth.token.role === 'fleet_manager' || auth.token.role === 'admin' || auth.token.role === 'super_admin')",
+      "$uid": {
+        ".write": "auth != null && auth.uid === $uid && auth.token.role === 'driver' && root.child('shifts').child($uid).child('activeUntil').val() > now",
+        ".validate": "newData.hasChildren(['lat', 'lng', 'accuracyM', 'recordedAt', 'serverAt', 'shiftId'])",
+        "lat": { ".validate": "newData.isNumber() && newData.val() >= 4.5 && newData.val() <= 11.3" },
+        "lng": { ".validate": "newData.isNumber() && newData.val() >= -3.4 && newData.val() <= 1.3" },
+        "accuracyM": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 5000" },
+        "speedKph": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 250" },
+        "heading": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() < 360" },
+        "recordedAt": { ".validate": "newData.isNumber() && newData.val() <= now + 60000" },
+        "serverAt": { ".validate": "newData.val() === now" },
+        "shiftId": { ".validate": "newData.isString() && newData.val() === root.child('shifts').child($uid).child('shiftId').val()" },
+        "vehicleId": { ".validate": "newData.isString() && newData.val().length <= 64" },
+        "$other": { ".validate": false }
+      }
+    },
+    "shifts": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid"
+      }
+    }
+  }
+}

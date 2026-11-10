@@ -194,7 +194,7 @@ export function priceShipment(rules: PricingRuleSet, input: PricingInput): Price
   pushLine(lines, 'MINIMUM_CHARGE', 'Minimum charge adjustment', Math.max(0, rules.minimumChargePesewas - afterDiscount));
 
   const subtotalPesewas = lines.filter((l) => l.amountPesewas > 0).reduce((s, l) => s + l.amountPesewas, 0);
-  const discountPesewas = -lines.filter((l) => l.amountPesewas < 0).reduce((s, l) => s + l.amountPesewas, 0);
+  const discountPesewas = Math.abs(lines.filter((l) => l.amountPesewas < 0).reduce((s, l) => s + l.amountPesewas, 0));
   const taxable = subtotalPesewas - discountPesewas;
 
   // 9. Taxes.

@@ -1,0 +1,28 @@
+{
+  "name": "@courier/functions",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "engines": { "node": "22" },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "build": "node scripts/build.mjs",
+    "serve": "pnpm build && firebase emulators:start --only functions,firestore,database",
+    "deploy": "pnpm build && firebase deploy --only functions"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.6.0",
+    "firebase-functions": "^7.0.0"
+  },
+  "devDependencies": {
+    "@courier/constants": "workspace:*",
+    "@courier/shared-types": "workspace:*",
+    "@courier/shared-utils": "workspace:*",
+    "@courier/validation": "workspace:*",
+    "@types/node": "^22.10.0",
+    "esbuild": "^0.25.0",
+    "zod": "^4.1.0"
+  }
+}
