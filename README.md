@@ -8,7 +8,7 @@ Monorepo for a company-operated courier service in Ghana: own vehicles, own driv
 |---|---|---|
 | 0 | Architecture & design documents | ✅ Complete — see [`docs/`](docs/README.md) |
 | 1 | Infrastructure, website, booking, pricing | ✅ Implemented & tested (needs real Firebase/Cloudflare/Mapbox projects to go live) |
-| 2 | Payments, customer accounts, tracking | Not started |
+| 2 | Payments, customer accounts, tracking | ✅ Implemented & tested (needs Paystack/SMS accounts to go live) |
 | 3 | Driver app, dispatch, intra-city maps | Not started |
 | 4 | Hubs, vehicles, manifests, intercity | Not started |
 | 5 | Business accounts, bulk bookings, invoices | Not started |
@@ -16,7 +16,9 @@ Monorepo for a company-operated courier service in Ghana: own vehicles, own driv
 
 **What works in Phase 1:** guests can search addresses (via the edge Worker), describe packages, get a server-calculated itemised price (intra-city, intercity or long-distance, with weight, urgency, handling, bulk and contract rules), and confirm a booking that stores an immutable price snapshot under a unique tracking number.
 
-**Not yet available:** online payment collection (Mobile Money/card bookings are stored as `pending_payment` for staff follow-up until Phase 2's verified payment integration), tracking pages, customer accounts, driver and dispatch apps.
+**What works in Phase 2:** online payment by Mobile Money or card through Paystack's hosted checkout, credited only after signature-checked webhooks are re-verified with Paystack (with polling and scheduled reconciliation as fallbacks); finance refunds; public and private tracking pages; customer accounts (phone or email) with booking history, saved addresses, claiming guest bookings and SMS preferences; printable receipts; SMS notifications.
+
+**Not yet available:** driver app, dispatch and ops/finance dashboards, live maps, hubs and intercity manifests, business accounts (Phases 3–6).
 
 ## Layout
 
@@ -24,7 +26,7 @@ Monorepo for a company-operated courier service in Ghana: own vehicles, own driv
 apps/web            Public site + booking (React, TypeScript, Tailwind, Vite) → Cloudflare Pages
 apps/admin-tools    Dispatch/admin/finance/fleet dashboards (Phase 2+)
 apps/driver-app     React Native driver app, Android-first (Phase 3)
-functions           Firebase Cloud Functions (quotes, bookings, pricing publication, roles)
+functions           Firebase Cloud Functions (quotes, bookings, payments, refunds, tracking, accounts, SMS, pricing, roles)
 workers/api-edge    Cloudflare Worker: cached, rate-limited geocoding proxy
 packages/*          constants, shared-types, validation (zod), shared-utils (pricing engine, lifecycle, geo)
 firebase            Firestore/RTDB/Storage rules, indexes, seed config, rules tests

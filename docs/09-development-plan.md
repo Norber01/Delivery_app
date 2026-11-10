@@ -2,7 +2,7 @@
 
 Each phase ends with a **gate**: all automated tests green, rules tests green, manual UAT checklist signed off in staging, docs updated. No phase starts before the previous gate passes.
 
-## Phase 1 — Infrastructure, website, booking, pricing  ✅ implemented in this repository (see status below)
+## Phase 1 — Infrastructure, website, booking, pricing  ✅ implemented
 - Monorepo, shared packages, CI-able scripts.
 - Pricing engine (all rule types in §4.2) with unit tests.
 - Delivery lifecycle state machine with tests (used from Phase 3, defined now so booking statuses are consistent).
@@ -21,12 +21,20 @@ Each phase ends with a **gate**: all automated tests green, rules tests green, m
 - Not yet exercised: deployed Cloud Functions with real App Check tokens, live Mapbox calls, Cloudflare Pages/Worker deployment — these need the company's Firebase, Cloudflare and Mapbox accounts.
 - Not in Phase 1: online payment (Mobile Money/card bookings are recorded as `pending_payment` for manual confirmation until Phase 2), tracking page, accounts, staff UI.
 
-## Phase 2 — Payments, customer accounts, tracking
-- `PaymentProvider` with Paystack (primary) and Hubtel adapters; `initiatePayment`, webhook endpoints, reconciliation job, refunds (finance).
-- Customer sign-up (phone OTP / email), saved addresses, booking history, receipts (PDF to R2).
-- Public tracking page (tracking number + token or phone verification), timeline from `trackingEvents`.
-- SMS notifications for booking confirmation and status changes.
-- **Gate:** webhook signature tests, idempotency tests, amount-mismatch tests, sandbox end-to-end payment, rules tests for customer reads.
+## Phase 2 — Payments, customer accounts, tracking  ✅ implemented
+- `PaymentProvider` with Paystack adapter; `initiatePayment`, `paystackWebhook`, `getPaymentStatus`, scheduled `reconcilePayments`, `refundPayment` (finance).
+- Customer sign-up (phone OTP / email with verification), `completeSignUp` (grants `customer` only to accounts with no role), guest-booking claim, saved addresses, booking history, SMS preferences.
+- Public tracking page (tracking number → public view; owner session or access code → full view) and timeline from `trackingEvents`.
+- Printable receipts (browser print/PDF) from server data.
+- SMS notifications (booking created/pending payment, payment received, refund processed) through a queue + Hubtel adapter, honouring customer preferences.
+- **Gate tests:** webhook signature, idempotency (including concurrent duplicate deliveries), amount/currency mismatch, duplicate payments, refund caps (including concurrent requests), tracking privacy, sign-up role safety, rules for customer reads.
+
+**Phase 2 status (honest summary):**
+- Unit-tested: Paystack adapter, payment/refund decisions and services, tracking view, accounts, notifications (66 function tests).
+- Emulator integration tests: concurrent webhook deliveries credit once; concurrent refunds capped; guest-booking claim moves payments too (this caught a transaction read-after-write bug, fixed).
+- Browser E2E (`functions/test-integration/e2e-browser.cjs`) against the Auth + Firestore emulators with real rules and a local Paystack stand-in: book → hosted checkout → signed webhook → verified confirmation → receipt; public tracking without personal data; wrong access code; email sign-up + verification → claim booking → saved address reused in booking; declined payment → retry.
+- Not yet exercised: real Paystack test-mode keys and dashboard webhooks, real SMS delivery (Hubtel sender ID approval), phone-OTP sign-in in a real browser (needs reCAPTCHA on a real domain).
+- Not in Phase 2: Hubtel payments adapter, finance/support staff UI, email receipts, support tickets (come with the ops app).
 
 ## Phase 3 — Driver app, dispatch, intra-city maps
 - Driver app: login (device-bound), shift start/end, assignments, navigation hand-off, QR scanning, pickup confirmation, GPS foreground service, status updates, failed delivery reporting, POD (OTP/signature/photo), history, offline queue.

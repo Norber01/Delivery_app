@@ -21,17 +21,29 @@ import type {
 
 const CACHE_MS = 5 * 60_000;
 
-/** Tiny per-instance TTL cache for rarely-changing configuration (cost control). */
+/**
+ * Tiny per-instance TTL cache for rarely-changing configuration (cost control).
+ * Empty results (no pricing published yet, no active areas) are not cached, so a newly
+ * configured project works immediately instead of after the TTL.
+ */
 class Cached<T> {
   private value: T | undefined;
   private at = 0;
-  constructor(private readonly load: () => Promise<T>) {}
+  constructor(
+    private readonly load: () => Promise<T>,
+    private readonly isEmpty: (v: T) => boolean = (v) => v === null,
+  ) {}
   async get(): Promise<T> {
     if (this.value === undefined || Date.now() - this.at > CACHE_MS) {
-      this.value = await this.load();
+      const v = await this.load();
+      this.value = this.isEmpty(v) ? undefined : v;
       this.at = Date.now();
+      return v;
     }
     return this.value;
+  }
+  invalidate() {
+    this.value = undefined;
   }
 }
 
@@ -69,7 +81,7 @@ export class FirestoreStore implements Store {
     this.areas = new Cached(async () => {
       const snap = await db.collection(COLLECTIONS.serviceAreas).where('active', '==', true).get();
       return snap.docs.map((d) => ({ ...(d.data() as Omit<ServiceArea, 'id'>), id: d.id }));
-    });
+    }, (v) => v.length === 0);
   }
 
   getActivePricingRules() {
@@ -179,6 +191,7 @@ export class FirestoreStore implements Store {
       });
       return next;
     });
+    this.rules.invalidate();
     return version;
   }
 
@@ -372,10 +385,21 @@ export class FirestoreStore implements Store {
     );
     batch.set(
       this.db.collection(COLLECTIONS.customers).doc(p.uid),
-      { notificationPrefs: { smsBookingUpdates: true, smsPaymentReceipts: true, emailReceipts: false } },
+      { notificationPrefs: { smsBookingUpdates: true, smsPaymentReceipts: true } },
       { merge: true },
     );
     await batch.commit();
+  }
+
+  async getSmsPreferences(trackingNumber: string) {
+    const booking = await this.bookingRef(trackingNumber).get();
+    const uid = booking.get('customerUid') as string | null | undefined;
+    if (!uid) return null;
+    const prefs = (await this.db.collection(COLLECTIONS.customers).doc(uid).get()).get('notificationPrefs') as
+      | { smsBookingUpdates?: boolean; smsPaymentReceipts?: boolean }
+      | undefined;
+    if (!prefs) return null;
+    return { smsBookingUpdates: prefs.smsBookingUpdates !== false, smsPaymentReceipts: prefs.smsPaymentReceipts !== false };
   }
 
   async queueNotification(n: NewNotification): Promise<void> {

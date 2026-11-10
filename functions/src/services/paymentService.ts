@@ -197,7 +197,13 @@ export function decidePaymentUpdate(
     },
   ];
   if (booking.status === 'pending_payment') {
-    events.push({ ...events[0]!, type: 'booking_confirmed', publicMessage: 'Booking confirmed — awaiting driver assignment' });
+    // +1 ms keeps the timeline order deterministic (payment, then confirmation).
+    events.push({
+      ...events[0]!,
+      type: 'booking_confirmed',
+      publicMessage: 'Booking confirmed — awaiting driver assignment',
+      occurredAt: new Date(now.getTime() + 1),
+    });
   }
   return {
     payment: paid,

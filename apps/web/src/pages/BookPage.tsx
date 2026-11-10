@@ -11,6 +11,10 @@ import { PriceBreakdown } from '../components/PriceBreakdown';
 import { api } from '../lib/api';
 import { ApiError, QUOTE_INVALIDATING_CODES } from '../lib/errors';
 import { contactToInput, draftToQuoteRequest, initialDraft, type BookingDraft, type ContactDraft } from '../lib/draft';
+import { PayButton } from '../components/PayButton';
+import { useAuth } from '../lib/auth';
+import { rememberAccess, trackLink } from '../lib/guestAccess';
+import { useSavedAddresses } from '../lib/useSavedAddresses';
 
 type Step = 'route' | 'packages' | 'quote' | 'details' | 'done';
 const STEPS: { id: Step; label: string }[] = [
@@ -39,13 +43,13 @@ const PAYMENT_OPTIONS: { value: PaymentPreference; label: string; hint: string }
   { value: 'cash_on_pickup', label: 'Pay the driver at pickup', hint: 'Cash or Mobile Money to the driver when your package is collected.' },
   {
     value: 'mobile_money',
-    label: 'Mobile Money (before pickup)',
-    hint: 'Our team will send you a payment request. Your booking is confirmed once payment is verified.',
+    label: 'Mobile Money — pay online now',
+    hint: 'MTN, Telecel or AirtelTigo via our payment partner. Your booking is confirmed once payment is verified.',
   },
   {
     value: 'card',
-    label: 'Card (before pickup)',
-    hint: 'Our team will send you a secure payment link. Your booking is confirmed once payment is verified.',
+    label: 'Card — pay online now',
+    hint: 'Visa or Mastercard via our payment partner. Your booking is confirmed once payment is verified.',
   },
 ];
 
@@ -66,6 +70,7 @@ export function BookPage() {
   const [quoted, setQuoted] = useState<Quoted | null>(null);
   const [booking, setBooking] = useState<CreateBookingResponse | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  const saved = useSavedAddresses();
 
   const request = useMemo(() => draftToQuoteRequest(draft), [draft]);
   const quoteIsCurrent = quoted !== null && quoted.key === keyOf(request);
@@ -152,6 +157,7 @@ export function BookPage() {
         paymentPreference: draft.paymentPreference,
         acceptTerms: true,
       });
+      if (res.guestAccessToken) rememberAccess(res.trackingNumber, res.guestAccessToken);
       setBooking(res);
       go('done');
     } catch (err) {
@@ -192,12 +198,13 @@ export function BookPage() {
 
       {step === 'route' && (
         <form onSubmit={submitRoute} className="space-y-6" noValidate>
-          <AddressField title="Pickup" value={draft.pickup} onChange={(pickup) => patch({ pickup })} errors={scoped('pickup', errors)} />
+          <AddressField title="Pickup" value={draft.pickup} onChange={(pickup) => patch({ pickup })} errors={scoped('pickup', errors)} saved={saved} />
           <AddressField
             title="Destination"
             value={draft.destination}
             onChange={(destination) => patch({ destination })}
             errors={scoped('destination', errors)}
+            saved={saved}
           />
           <div className="flex justify-end">
             <button className="btn-primary">Continue</button>
@@ -411,16 +418,17 @@ function ContactFields({
 }
 
 function BookingConfirmation({ booking }: { booking: CreateBookingResponse }) {
+  const { user } = useAuth();
   const confirmed = booking.status === 'confirmed';
   return (
     <div className="card space-y-5 text-center">
       <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-brand-100 text-2xl text-brand-700">✓</div>
       <div>
-        <h2 className="text-2xl font-bold">{confirmed ? 'Booking confirmed' : 'Booking received'}</h2>
+        <h2 className="text-2xl font-bold">{confirmed ? 'Booking confirmed' : 'Booking received — payment needed'}</h2>
         <p className="text-slate-600">
           {confirmed
             ? 'Our dispatch team will assign a driver for pickup.'
-            : 'We will send you a payment request. Your booking is confirmed as soon as payment is verified.'}
+            : 'Pay now to confirm your booking. We dispatch a driver as soon as payment is verified.'}
         </p>
       </div>
       <div className="rounded-lg bg-slate-50 p-4">
@@ -428,16 +436,30 @@ function BookingConfirmation({ booking }: { booking: CreateBookingResponse }) {
         <p className="font-mono text-2xl font-bold tracking-wider">{booking.trackingNumber}</p>
         <p className="mt-2 text-sm text-slate-600">Total: {formatGhs(booking.totalPesewas)}</p>
       </div>
+      {!confirmed && (
+        <div className="flex justify-center">
+          <PayButton trackingNumber={booking.trackingNumber} accessToken={booking.guestAccessToken ?? undefined} label={`Pay ${formatGhs(booking.totalPesewas)} now`} />
+        </div>
+      )}
       {booking.guestAccessToken && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-left text-sm text-amber-900">
           <p className="mb-1 font-semibold">Save your booking access code</p>
-          <p className="mb-2">You will need it with your tracking number to view or manage this booking. It is shown only once.</p>
+          <p className="mb-2">
+            You need it with your tracking number to see full details, pay, or add this booking to an account. It is shown only once.
+          </p>
           <p className="break-all rounded bg-white px-2 py-1 font-mono">{booking.guestAccessToken}</p>
         </div>
       )}
-      <Link to="/" className="btn-secondary">
-        Back to home
-      </Link>
+      <div className="flex flex-wrap justify-center gap-2">
+        <Link to={trackLink(booking.trackingNumber, booking.guestAccessToken)} className="btn-secondary">
+          Track this booking
+        </Link>
+        {!user && (
+          <Link to="/signin" className="btn-secondary">
+            Create an account
+          </Link>
+        )}
+      </div>
     </div>
   );
 }

@@ -188,6 +188,11 @@ export class MemoryStore implements Store {
   async upsertUserProfile(p: UserProfileInput) {
     this.users.set(p.uid, p);
   }
+  smsPrefs = new Map<string, { smsBookingUpdates: boolean; smsPaymentReceipts: boolean }>();
+  async getSmsPreferences(tn: string) {
+    const uid = this.bookings.get(tn)?.customerUid;
+    return uid ? (this.smsPrefs.get(uid) ?? null) : null;
+  }
   async queueNotification(n: NewNotification) {
     this.notifications.push({ ...n, id: `n${this.notifications.length + 1}`, status: 'queued', attempts: 0, providerMessageId: null, error: null });
   }

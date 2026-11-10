@@ -241,6 +241,15 @@ describe('notifications', () => {
     expect(await deliverNotification({ store: w.store, sms: null }, n)).toBe('skipped');
   });
 
+  it("respects a signed-in customer's SMS preferences", async () => {
+    const alice = { uid: 'alice', role: 'customer' as const, businessId: null, mfa: false };
+    await w.book(alice);
+    w.store.smsPrefs.set('alice', { smsBookingUpdates: false, smsPaymentReceipts: true });
+    const ok = { name: 'x', send: async () => ({ providerMessageId: 'm1' }) };
+    expect(await deliverNotification({ store: w.store, sms: ok }, w.store.notifications[0]!)).toBe('skipped');
+    expect(w.store.notifications[0]!.error).toBe('Customer opted out');
+  });
+
   it('sends, and retries failures up to the limit', async () => {
     await w.book();
     const n = { ...w.store.notifications[0]! };

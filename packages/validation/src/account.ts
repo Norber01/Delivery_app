@@ -32,7 +32,6 @@ export const savedAddressSchema = addressSchema.extend({
 export const notificationPrefsSchema = z.object({
   smsBookingUpdates: z.boolean(),
   smsPaymentReceipts: z.boolean(),
-  emailReceipts: z.boolean(),
 });
 
 export const completeSignUpSchema = z.object({

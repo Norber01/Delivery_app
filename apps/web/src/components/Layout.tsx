@@ -1,7 +1,9 @@
 import { Link, NavLink, Outlet } from 'react-router';
+import { useAuth } from '../lib/auth';
 import { config } from '../lib/config';
 
 export function Layout() {
+  const { user, role } = useAuth();
   const nav = ({ isActive }: { isActive: boolean }) =>
     `rounded-md px-3 py-2 text-sm font-medium ${isActive ? 'text-brand-700' : 'text-slate-600 hover:text-slate-900'}`;
   return (
@@ -15,8 +17,11 @@ export function Layout() {
             {config.companyName}
           </Link>
           <nav className="flex items-center gap-1">
-            <NavLink to="/" end className={nav}>
-              Home
+            <NavLink to="/track" className={nav}>
+              Track
+            </NavLink>
+            <NavLink to={user && role ? '/account' : '/signin'} className={nav}>
+              {user && role ? 'My account' : 'Sign in'}
             </NavLink>
             <NavLink to="/book" className="btn-primary ml-2">
               Book a delivery

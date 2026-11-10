@@ -37,7 +37,7 @@ service cloud.firestore {
         && (!('defaultPaymentPreference' in request.resource.data) || request.resource.data.defaultPaymentPreference in ['mobile_money', 'card', 'cash_on_pickup'])
         && (!('notificationPrefs' in request.resource.data) || (
               request.resource.data.notificationPrefs is map
-              && request.resource.data.notificationPrefs.keys().hasOnly(['smsBookingUpdates', 'smsPaymentReceipts', 'emailReceipts'])));
+              && request.resource.data.notificationPrefs.keys().hasOnly(['smsBookingUpdates', 'smsPaymentReceipts'])));
       allow delete: if false;
     }
 

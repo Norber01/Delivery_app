@@ -194,6 +194,8 @@ export interface Store {
   ): Promise<MutationOutcome>;
 
   upsertUserProfile(p: UserProfileInput): Promise<void>;
+  /** SMS preferences of the customer who owns the booking (null for guest bookings or no profile). */
+  getSmsPreferences(trackingNumber: string): Promise<{ smsBookingUpdates: boolean; smsPaymentReceipts: boolean } | null>;
   queueNotification(n: NewNotification): Promise<void>;
   updateNotification(id: string, patch: Partial<NotificationRecord>): Promise<void>;
 

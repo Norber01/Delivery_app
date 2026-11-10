@@ -13,6 +13,7 @@ pnpm install
 pnpm test                      # unit tests: shared packages, functions services, worker, web
 pnpm test:rules                # Firestore + RTDB security rules against the emulators
 pnpm --filter @courier/functions test:integration   # FirestoreStore + services against the Firestore emulator
+# Browser E2E (Phases 1–2): see the header of functions/test-integration/e2e-browser.cjs
 
 # Run the stack
 firebase emulators:start --project demo-courier --only auth,firestore,database,functions
@@ -33,8 +34,16 @@ pnpm dev:web                   # http://localhost:5173
 4. **Secrets** (Google Secret Manager via Firebase):
    ```bash
    firebase functions:secrets:set MAPBOX_SERVER_TOKEN --project <id>
-   firebase functions:secrets:set IP_HASH_SALT --project <id>     # 32+ random bytes
+   firebase functions:secrets:set IP_HASH_SALT --project <id>          # 32+ random bytes
+   firebase functions:secrets:set PAYSTACK_SECRET_KEY --project <id>   # sk_test_… in staging, sk_live_… in production
+   firebase functions:secrets:set HUBTEL_SMS_CLIENT_ID --project <id>  # enter "unset" until SMS is contracted
+   firebase functions:secrets:set HUBTEL_SMS_CLIENT_SECRET --project <id>
    ```
+   Non-secret parameters are prompted on first deploy (or set in `functions/.env.<project-id>`):
+   `PUBLIC_SITE_URL`, `COMPANY_NAME`, `PAYMENT_FALLBACK_EMAIL_DOMAIN`, `SMS_SENDER_ID`.
+   While the SMS secrets are `unset`, notifications are recorded with status `skipped` (nothing is sent).
+   **Paystack:** set the dashboard webhook URL to the deployed `paystackWebhook` function URL.
+   **Auth:** enable Email/Password (with email verification) and Phone providers; add the site domain to authorised domains.
 5. **TTL policies** (cost control and data retention):
    ```bash
    gcloud firestore fields ttls update expiresAt --collection-group=quotes --enable-ttl --project <id>

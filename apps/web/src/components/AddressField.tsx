@@ -1,5 +1,6 @@
 import { GHANA_REGIONS, type GhanaRegion } from '@courier/constants';
 import type { GeocodeResult } from '@courier/shared-utils';
+import type { SavedAddress } from '@courier/validation';
 import { useEffect, useRef, useState } from 'react';
 import type { AddressDraft } from '../lib/draft';
 import { searchAddress } from '../lib/geocode';
@@ -10,12 +11,13 @@ interface Props {
   value: AddressDraft;
   onChange: (v: AddressDraft) => void;
   errors: Record<string, string>;
+  saved?: SavedAddress[];
 }
 
 const matchRegion = (name?: string): GhanaRegion | '' =>
   (GHANA_REGIONS.find((r) => name?.toLowerCase().includes(r.toLowerCase())) ?? '') as GhanaRegion | '';
 
-export function AddressField({ title, value, onChange, errors }: Props) {
+export function AddressField({ title, value, onChange, errors, saved = [] }: Props) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<GeocodeResult[]>([]);
   const [searchError, setSearchError] = useState<string | null>(null);
@@ -77,6 +79,34 @@ export function AddressField({ title, value, onChange, errors }: Props) {
   return (
     <fieldset className="card space-y-4">
       <legend className="px-1 text-base font-semibold text-slate-900">{title}</legend>
+
+      {saved.length > 0 && (
+        <select
+          className="input"
+          aria-label={`${title}: use a saved address`}
+          value=""
+          onChange={(e) => {
+            const a = saved[Number(e.target.value)];
+            if (!a) return;
+            onChange({
+              line1: a.line1,
+              line2: a.line2 ?? '',
+              city: a.city,
+              region: a.region,
+              landmark: a.landmark ?? '',
+              ghanaPostGps: a.ghanaPostGps ?? '',
+              location: a.location,
+            });
+          }}
+        >
+          <option value="">Use a saved address…</option>
+          {saved.map((a, i) => (
+            <option key={`${a.label}-${i}`} value={i}>
+              {a.label} — {a.line1}
+            </option>
+          ))}
+        </select>
+      )}
 
       <div className="relative space-y-1">
         <label className="block text-sm font-medium text-slate-700" htmlFor={`${title}-search`}>

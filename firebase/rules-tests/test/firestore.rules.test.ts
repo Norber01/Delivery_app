@@ -141,7 +141,7 @@ describe('Phase 2: accounts, payments, tracking', () => {
 
   it('notification preferences accept only known keys', async () => {
     const db = as('alice', { role: 'customer' });
-    await assertSucceeds(setDoc(doc(db, 'customers/alice'), { notificationPrefs: { smsBookingUpdates: false, smsPaymentReceipts: true, emailReceipts: false } }));
+    await assertSucceeds(setDoc(doc(db, 'customers/alice'), { notificationPrefs: { smsBookingUpdates: false, smsPaymentReceipts: true } }));
     await assertFails(setDoc(doc(db, 'customers/alice'), { notificationPrefs: { isAdmin: true } }));
   });
 });

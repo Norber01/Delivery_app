@@ -100,7 +100,7 @@ Short-lived (TTL 30 min). `input` (validated `QuoteRequest`), `result` (`PriceQu
 `routeId`, `vehicleId`, `driverUids[]`, `departureAt`, `status: open | sealed | departed | arrived | closed`, `deliveryIds[]`, `sealedBy`, `scanCounts`.
 
 ### `trackingEvents/{id}` — W: S, append-only
-`deliveryId`, `trackingNumber`, `type` (status change, scan, hub_in, hub_out, exception, location_checkpoint), `status`, `location?`, `hubId?`, `actorUid`, `actorRole`, `publicMessage` (safe to show customers), `internalNote?`, `occurredAt`.
+`trackingNumber`, `deliveryId` (null until operations creates the delivery), `trackingNumber`, `type` (status change, scan, hub_in, hub_out, exception, location_checkpoint), `status`, `location?`, `hubId?`, `actorUid`, `actorRole`, `publicMessage` (safe to show customers), `internalNote?`, `occurredAt`.
 
 ### `deliveryRoutes/{deliveryId_legId}` — W: S
 Cached Directions result per leg: `polyline` (encoded), `distanceKm`, `durationMinutes`, `provider`, `computedAt`. Prevents repeat Directions calls.
@@ -110,18 +110,22 @@ Cached Directions result per leg: `polyline` (encoded), `distanceKm`, `durationM
 
 ## 2.5 Money
 
-### `payments/{id}` — W: S only
-`requestId`, `provider: paystack | hubtel | cash | invoice`, `providerReference`, `amountPesewas`, `currency`, `channel: mobile_money | card | bank | cash`, `status: initiated | pending | succeeded | failed | refunded`, `verifiedAt?`, `verificationSource: webhook | status_api | manual_reconciliation`, `rawEventIds[]`. Unique index on `(provider, providerReference)` enforced by deterministic doc ID `${provider}_${reference}`.
+### `payments/{provider_reference}` — W: S only
+`provider`, `reference` (`TRACKINGNUMBER-xxxxxxxx`), `trackingNumber`, `customerUid`, `businessId` (both for read rules), `amountPesewas` (copied from the booking), `currency`, `status: initiated | pending | succeeded | failed | flagged | expired`, `reviewReason: null | amount_mismatch | reference_mismatch | duplicate_payment | booking_cancelled`, `channel`, `providerTransactionId`, `verificationSource: webhook | status_poll | reconciliation`, `refundedPesewas`, `refundPendingPesewas`, `createdAt`, `lastVerifiedAt`, `paidAt`. The deterministic doc ID makes a reference map to exactly one record.
 
-### `paymentEvents/{provider_eventId}` — W: S
-Raw verified webhook payloads (idempotency key = doc ID).
+### `paymentEvents/{eventKey}` — W: S
+Idempotency markers for processed webhook events (`paystack_<event>_<id>`), created in the same transaction as the update they caused.
+
+### `refunds/{id}` — W: S
+`paymentId`, `trackingNumber`, `amountPesewas`, `status: pending | processed | failed`, `providerRefundId`, `reason`, `requestedBy`, `error`. Readable by finance/admin.
 
 ### `refunds/{id}`, `invoices/{id}`, `expenses/{id}`, `driverPayments/{id}` — W: S
 Invoices: `businessId`, `period`, `lines[]` (deliveryIds), `totalPesewas`, `status: draft | issued | paid | overdue | void`, `pdfR2Key`. Expenses: `category: fuel | maintenance | driver_payment | hub | other`, `amountPesewas`, `vehicleId?`, `hubId?`, `receiptR2Key?`, `approvedBy`.
 
 ## 2.6 Support & audit
 
-- `notifications/{id}` — W: S. `recipientUid`, `channel: push | sms | email`, `template`, `deliveryId?`, `status`, `sentAt`.
+- `notifications/{id}` — W: S. `channel: sms` (push in Phase 3), `recipientPhone`, `template`, `trackingNumber`, `body`, `status: queued | sent | failed | skipped`, `attempts`, `providerMessageId`, `error`, `sentAt`. Created inside the transaction that caused it; delivered by the `sendNotification` trigger.
+- `customers/{uid}.notificationPrefs` — `{ smsBookingUpdates, smsPaymentReceipts }`, honoured for the booking owner's non-essential SMS.
 - `supportTickets/{id}` — W: create by owner (validated), updates by staff/server. `customerUid?`, `trackingNumber?`, `category`, `messages` subcollection.
 - `auditLogs/{id}` — W: S, append-only, never readable by non-admins. `actorUid`, `actorRole`, `action`, `targetType`, `targetId`, `before?`, `after?`, `ipHash?`, `at`.
 - `rateLimits/{key}` — W: S. Fixed-window counters (`count`, `windowStart`), TTL.
@@ -166,7 +170,11 @@ vehicles 1─* maintenance, fuelLogs ; expenses *─0..1 vehicles/hubs
 | deliveries | serviceAreaId ASC, status ASC, updatedAt DESC | dispatch board |
 | deliveries | status ASC, expectedDeliveryAt ASC | delayed delivery detection |
 | assignments | driverUid ASC, status ASC, createdAt DESC | driver's job list |
-| trackingEvents | deliveryId ASC, occurredAt ASC | timeline |
+| trackingEvents | trackingNumber ASC, occurredAt ASC | public timeline |
+| trackingEvents | deliveryId ASC, occurredAt ASC | operational timeline |
+| payments | trackingNumber ASC, createdAt DESC | payments per booking |
+| payments | status ASC, createdAt ASC | reconciliation |
+| payments | reviewReason ASC, createdAt DESC | finance review queue |
 | payments | requestId ASC, createdAt DESC | payment history |
 | manifests | routeId ASC, departureAt DESC | departures |
 | expenses | category ASC, createdAt DESC | finance reports |
