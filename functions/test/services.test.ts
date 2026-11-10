@@ -219,6 +219,13 @@ describe('createBooking', () => {
     expect(r2.trackingNumber).toBe('GHUNIQUE00001');
   });
 
+  it('treats null optional fields (as sent by the callable SDK) as matching the quote', async () => {
+    const q = await getQuote(deps, quoteReq, GUEST, meta);
+    const withNulls = { ...quoteReq, pickup: { ...osu, line2: null, landmark: null }, packages: [{ ...quoteReq.packages[0], declaredValuePesewas: null }] };
+    const res = await createBooking(deps, { quoteId: q.quoteId, quote: withNulls, ...contacts, instructions: null }, GUEST, meta);
+    expect(res.trackingNumber).toMatch(/^GH/);
+  });
+
   it('requires accepting the terms', async () => {
     await expectAppError(quoteThenBook(GUEST, { acceptTerms: false }), 'VALIDATION_FAILED');
   });

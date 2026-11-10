@@ -14,10 +14,12 @@ Each phase ends with a **gate**: all automated tests green, rules tests green, m
 - **Gate tests:** pricing, validation, tracking number, booking service (quote expiry, reuse, tamper), rules tests.
 
 **Phase 1 status (honest summary):**
-- Implemented and unit-tested: pricing engine, lifecycle, validation, tracking numbers, quote and booking services, role assignment guard, worker geocode handler.
-- Implemented, require Firebase/Cloudflare projects to run end-to-end: deployed functions, website against live backend, Worker deployment.
-- Security rules tests are written and run against the Firestore emulator (`pnpm test:rules`), which requires Java and the Firebase CLI.
-- Not in Phase 1: online payment (bookings with MoMo/card are recorded as `pending_payment` for manual confirmation), tracking page, accounts.
+- Implemented and unit-tested: pricing engine, lifecycle state machine, validation, tracking numbers, quote and booking services, role-assignment and pricing-publication guards, edge Worker geocode handler, web draft conversion.
+- Integration-tested against the Firestore emulator: `FirestoreStore` transactions (quote single-use under concurrent bookings, versioned pricing publication, rate-limit counters, null optional fields from the callable SDK).
+- Security rules tests (Firestore + RTDB) run against the emulators (`pnpm test:rules`).
+- Browser smoke test: the production web build was driven through the full booking flow with Playwright against the real services and Firestore emulator (harness: `functions/test-integration/e2e-shim.ts`). Screenshots in `docs/screenshots/`.
+- Not yet exercised: deployed Cloud Functions with real App Check tokens, live Mapbox calls, Cloudflare Pages/Worker deployment — these need the company's Firebase, Cloudflare and Mapbox accounts.
+- Not in Phase 1: online payment (Mobile Money/card bookings are recorded as `pending_payment` for manual confirmation until Phase 2), tracking page, accounts, staff UI.
 
 ## Phase 2 — Payments, customer accounts, tracking
 - `PaymentProvider` with Paystack (primary) and Hubtel adapters; `initiatePayment`, webhook endpoints, reconciliation job, refunds (finance).

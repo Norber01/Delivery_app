@@ -4,13 +4,18 @@
   "private": true,
   "type": "module",
   "main": "lib/index.js",
-  "engines": { "node": "22" },
+  "engines": {
+    "node": "22"
+  },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
     "build": "node scripts/build.mjs",
     "serve": "pnpm build && firebase emulators:start --only functions,firestore,database",
-    "deploy": "pnpm build && firebase deploy --only functions"
+    "deploy": "pnpm build && firebase deploy --only functions",
+    "test:integration": "firebase emulators:exec --project demo-courier --only firestore \"vitest run --config vitest.integration.config.ts\"",
+    "seed": "tsx scripts/seed.ts",
+    "bootstrap-admin": "tsx scripts/bootstrap-admin.ts"
   },
   "dependencies": {
     "firebase-admin": "^13.6.0",
@@ -23,6 +28,7 @@
     "@courier/validation": "workspace:*",
     "@types/node": "^22.10.0",
     "esbuild": "^0.25.0",
-    "zod": "^4.1.0"
+    "zod": "^4.1.0",
+    "tsx": "^4.20.0"
   }
 }

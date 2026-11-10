@@ -21,6 +21,8 @@ const MAPBOX_SERVER_TOKEN = defineSecret('MAPBOX_SERVER_TOKEN');
 const IP_HASH_SALT = defineSecret('IP_HASH_SALT');
 
 const db = getFirestore();
+// Optional fields normalise to undefined (see validation `optional`); omit them rather than fail.
+db.settings({ ignoreUndefinedProperties: true });
 const store = new FirestoreStore(db);
 const rateLimiter = new FirestoreRateLimiter(db);
 

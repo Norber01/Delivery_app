@@ -110,3 +110,29 @@ describe('pricing rule set', () => {
     expect(pricingRuleSetSchema.safeParse(bad).success).toBe(false);
   });
 });
+
+describe('friendly messages', () => {
+  it('uses plain-language messages instead of zod defaults', () => {
+    const r = quoteRequestSchema.safeParse({ ...quote, pickup: { ...address, city: '', region: 'Nowhere' } });
+    expect(r.success).toBe(false);
+    const msgs = Object.fromEntries(r.error!.issues.map((i) => [i.path.join('.'), i.message]));
+    expect(msgs['pickup.city']).toBe('Enter at least 2 characters');
+    expect(msgs['pickup.region']).toBe('Please choose an option');
+    const n = quoteRequestSchema.safeParse({ ...quote, packages: [{ ...quote.packages[0], weightKg: NaN }] });
+    expect(n.error!.issues[0]!.message).toBe('Enter a number');
+  });
+});
+
+describe('null handling (Firebase callable encodes undefined as null)', () => {
+  it('accepts null optional fields and normalises them away', () => {
+    const withNulls = {
+      ...quote,
+      pickup: { ...address, line2: null, landmark: null, ghanaPostGps: null },
+      packages: [{ ...quote.packages[0], declaredValuePesewas: null }],
+    };
+    const a = quoteRequestSchema.parse(withNulls);
+    const b = quoteRequestSchema.parse(quote);
+    expect(a).toEqual(b);
+    expect('line2' in a.pickup && a.pickup.line2 !== undefined).toBe(false);
+  });
+});

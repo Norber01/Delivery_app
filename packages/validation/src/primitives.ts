@@ -4,6 +4,16 @@ import { GHANA_BOUNDS, GHANA_MOBILE_PREFIXES, GHANA_REGIONS } from '@courier/con
 // eslint-disable-next-line no-control-regex
 const CONTROL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/;
 
+/**
+ * Optional field that also accepts `null` and normalises it to `undefined`.
+ * Needed because the Firebase callable SDK serialises `undefined` as `null`,
+ * and so that `{x: null}` and `{}` hash identically for quote matching.
+ */
+export const optional = <T extends z.ZodTypeAny>(schema: T) =>
+  schema
+    .nullish()
+    .transform((v) => (v === null ? undefined : v) as z.output<T> | undefined);
+
 /** Trimmed text, bounded length, no control characters. */
 export const safeText = (min: number, max: number) =>
   z
@@ -58,18 +68,18 @@ export const regionSchema = z.enum(GHANA_REGIONS);
 
 export const addressSchema = z.object({
   line1: safeText(3, 200),
-  line2: safeText(1, 200).optional(),
+  line2: optional(safeText(1, 200)),
   city: safeText(2, 80),
   region: regionSchema,
-  landmark: safeText(2, 200).optional(),
-  ghanaPostGps: ghanaPostGpsSchema.optional(),
+  landmark: optional(safeText(2, 200)),
+  ghanaPostGps: optional(ghanaPostGpsSchema),
   location: latLngSchema,
 });
 
 export const contactSchema = z.object({
   name: safeText(2, 120),
   phone: ghanaPhoneSchema,
-  email: z.string().trim().toLowerCase().email().max(254).optional(),
+  email: optional(z.string().trim().toLowerCase().email().max(254)),
 });
 
 export const pesewasSchema = z.number().int().nonnegative().max(1_000_000_000);

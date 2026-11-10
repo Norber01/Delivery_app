@@ -11,7 +11,7 @@ export type RandomBytes = (n: number) => Uint8Array;
 
 const defaultRandom: RandomBytes = (n) => {
   const buf = new Uint8Array(n);
-  globalThis.crypto.getRandomValues(buf);
+  crypto.getRandomValues(buf);
   return buf;
 };
 
