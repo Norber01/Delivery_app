@@ -155,3 +155,32 @@ describe('account & access schemas', async () => {
     expect(refundRequestSchema.safeParse({ paymentReference: 'GHABC-12345', amountPesewas: 100, reason: 'Customer cancelled' }).success).toBe(true);
   });
 });
+
+describe('operations schemas', async () => {
+  const { driverActionSchema, dispatchActionSchema, vehicleSchema, signatureSchema } = await import('../src/index.js');
+  const base = { actionId: 'a'.repeat(20), deliveryId: 'GHABC', occurredAt: '2026-11-15T10:00:00Z' };
+  const sig = [Array.from({ length: 12 }, (_, i) => [i / 12, 0.5] as [number, number])];
+  it('validates driver actions by type', () => {
+    expect(driverActionSchema.safeParse({ ...base, type: 'start_assignment' }).success).toBe(true);
+    expect(driverActionSchema.safeParse({ ...base, type: 'report_pickup_failed' }).success).toBe(false); // reason required
+    expect(driverActionSchema.safeParse({ ...base, type: 'complete_delivery', receivedByName: 'Kofi', otp: '12345' }).success).toBe(false);
+    expect(driverActionSchema.safeParse({ ...base, type: 'complete_return', receivedByName: 'Ama', signature: sig }).success).toBe(true);
+    expect(driverActionSchema.safeParse({ ...base, type: 'complete_delivery', receivedByName: 'Kofi', photoKeys: ['../etc/passwd'] }).success).toBe(false);
+  });
+  it('caps signature size', () => {
+    expect(signatureSchema.safeParse([[[0.1, 0.1]]]).success).toBe(false);
+    expect(signatureSchema.safeParse(Array.from({ length: 61 }, () => sig[0])).success).toBe(false);
+    expect(signatureSchema.safeParse([[[1.5, 0]]]).success).toBe(false);
+  });
+  it('requires a driver to assign and a reason to cancel', () => {
+    expect(dispatchActionSchema.safeParse({ type: 'assign', deliveryId: 'GHX' }).success).toBe(false);
+    expect(dispatchActionSchema.safeParse({ type: 'cancel', deliveryId: 'GHX' }).success).toBe(false);
+    expect(dispatchActionSchema.safeParse({ type: 'cancel', deliveryId: 'GHX', reason: 'Customer request' }).success).toBe(true);
+  });
+  it('normalises Ghana vehicle registrations', () => {
+    expect(vehicleSchema.parse({ registrationNumber: 'gr 1234-24', vehicleClass: 'motorbike', capacityKg: 20, homeServiceAreaId: 'accra', status: 'available' }).registrationNumber).toBe('GR 1234-24');
+    expect(vehicleSchema.parse({ registrationNumber: 'm-22-gr  1234', vehicleClass: 'motorbike', capacityKg: 20, homeServiceAreaId: 'accra', status: 'available' }).registrationNumber).toBe('M-22-GR 1234');
+    expect(vehicleSchema.safeParse({ registrationNumber: '!!', vehicleClass: 'car', capacityKg: 20, homeServiceAreaId: 'accra', status: 'available' }).success).toBe(false);
+    expect(vehicleSchema.safeParse({ registrationNumber: 'ABCDEF', vehicleClass: 'car', capacityKg: 20, homeServiceAreaId: 'accra', status: 'available' }).success).toBe(false);
+  });
+});

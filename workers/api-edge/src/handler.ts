@@ -1,8 +1,17 @@
-import type { GeocodeResult, MapProvider } from '@courier/shared-utils';
+import { verifyUploadToken, type GeocodeResult, type MapProvider } from '@courier/shared-utils';
+
+/** Subset of the R2 bucket binding used here (easy to fake in tests). */
+export interface EvidenceBucket {
+  put(key: string, value: ArrayBuffer, opts: { httpMetadata: { contentType: string } }): Promise<unknown>;
+  get(key: string): Promise<{ body: ReadableStream; httpMetadata?: { contentType?: string } } | null>;
+  head(key: string): Promise<unknown | null>;
+}
 
 export interface Env {
   MAPBOX_TOKEN: string;
   ALLOWED_ORIGINS: string;
+  UPLOAD_SIGNING_SECRET?: string;
+  EVIDENCE?: EvidenceBucket;
   GEOCODE_LIMITER?: { limit(opts: { key: string }): Promise<{ success: boolean }> };
 }
 
@@ -15,6 +24,7 @@ export interface HandlerDeps {
   maps: MapProvider;
   cache: EdgeCache | null;
   waitUntil: (p: Promise<unknown>) => void;
+  nowMs?: () => number;
 }
 
 const CACHE_SECONDS = 24 * 3600;
@@ -43,8 +53,46 @@ export function normalizeQuery(q: string): string {
   return q.normalize('NFKC').trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
+const EVIDENCE_KEY = /^pod\/[A-Za-z0-9_-]{1,64}\/[A-Za-z0-9_-]{8,64}\.(jpg|png|webp)$/;
+
+/**
+ * Proof-of-delivery photos in a private R2 bucket. Every request needs a short-lived URL signed
+ * by Cloud Functions after its own authorisation check (PUT: assigned driver; GET: ops staff;
+ * HEAD: functions confirming an upload). Objects are write-once.
+ */
+async function handleEvidence(req: Request, url: URL, env: Env, nowSeconds: number): Promise<Response> {
+  if (!env.EVIDENCE || !env.UPLOAD_SIGNING_SECRET) return json({ error: 'not_configured' }, 503);
+  const key = decodeURIComponent(url.pathname.slice('/evidence/'.length));
+  const method = req.method as 'PUT' | 'GET' | 'HEAD';
+  if (!EVIDENCE_KEY.test(key) || !['PUT', 'GET', 'HEAD'].includes(method)) return json({ error: 'not_found' }, 404);
+  const expires = Number(url.searchParams.get('exp'));
+  const contentType = url.searchParams.get('ct') ?? undefined;
+  const maxBytes = url.searchParams.has('max') ? Number(url.searchParams.get('max')) : undefined;
+  const ok = await verifyUploadToken(env.UPLOAD_SIGNING_SECRET, { method, key, expires, contentType, maxBytes }, url.searchParams.get('sig') ?? '', nowSeconds);
+  if (!ok) return json({ error: 'invalid_or_expired_link' }, 403);
+
+  if (method === 'HEAD') return new Response(null, { status: (await env.EVIDENCE.head(key)) ? 200 : 404 });
+  if (method === 'GET') {
+    const obj = await env.EVIDENCE.get(key);
+    if (!obj) return json({ error: 'not_found' }, 404);
+    return new Response(obj.body, {
+      headers: { 'Content-Type': obj.httpMetadata?.contentType ?? 'application/octet-stream', 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' },
+    });
+  }
+  // PUT
+  if (!contentType || !maxBytes || req.headers.get('Content-Type') !== contentType) return json({ error: 'wrong_content_type' }, 415);
+  const declared = Number(req.headers.get('Content-Length') ?? NaN);
+  if (!Number.isFinite(declared) || declared > maxBytes) return json({ error: 'too_large' }, 413);
+  if (await env.EVIDENCE.head(key)) return json({ error: 'already_uploaded' }, 409);
+  const body = await req.arrayBuffer();
+  if (body.byteLength > maxBytes || body.byteLength === 0) return json({ error: 'too_large' }, 413);
+  await env.EVIDENCE.put(key, body, { httpMetadata: { contentType } });
+  return json({ ok: true, key }, 201);
+}
+
 export async function handleRequest(req: Request, env: Env, deps: HandlerDeps): Promise<Response> {
   const url = new URL(req.url);
+  if (url.pathname.startsWith('/evidence/')) return handleEvidence(req, url, env, Math.floor((deps.nowMs?.() ?? Date.now()) / 1000));
   const origin = req.headers.get('Origin');
   const cors = corsHeaders(origin, env);
 

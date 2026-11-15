@@ -1,0 +1,152 @@
+import type { DriverDoc, DriverLocation, VehicleDoc } from '@courier/shared-types';
+import type { AssignmentRecord, DeliveryRecord, DriverActionRecord, EvidenceStore, LivePort, OpsContext, OpsMutation, OpsOutcome, OpsStore, PodSecret } from '../src/ops/types.js';
+import type { ProofOfDeliveryDoc } from '@courier/shared-types';
+import type { MemoryStore } from './memoryStore.js';
+
+const BUSY = ['assigned', 'en_route_to_pickup', 'out_for_delivery', 'delivery_failed', 'returning_to_sender'];
+const clone = <T>(v: T): T => structuredClone(v);
+
+/** In-memory OpsStore sharing bookings/events/notifications/audit with a MemoryStore. */
+export class MemoryOpsStore implements OpsStore {
+  deliveries = new Map<string, DeliveryRecord>();
+  assignments = new Map<string, AssignmentRecord>();
+  podSecrets = new Map<string, PodSecret>();
+  pods = new Map<string, ProofOfDeliveryDoc>();
+  drivers = new Map<string, DriverDoc>();
+  vehicles = new Map<string, VehicleDoc>();
+  actions = new Map<string, DriverActionRecord>();
+  uploads = new Map<string, { deliveryId: string; driverUid: string }>();
+
+  constructor(
+    private readonly store: MemoryStore,
+    private readonly clock: { now: Date },
+  ) {}
+
+  async getDelivery(id: string) {
+    const d = this.deliveries.get(id);
+    return d ? clone(d) : null;
+  }
+  async createDelivery(d: DeliveryRecord) {
+    const b = this.store.bookings.get(d.trackingNumber);
+    if (this.deliveries.has(d.id) || !b || b.deliveryId) return 'exists' as const;
+    this.deliveries.set(d.id, clone(d));
+    b.deliveryId = d.id;
+    return 'created' as const;
+  }
+  async runDeliveryTx(
+    id: string,
+    opts: { driverUid?: string; action?: { actionId: string; driverUid: string; type: string } },
+    decide: (ctx: OpsContext) => OpsMutation,
+  ): Promise<OpsOutcome> {
+    if (opts.action && this.actions.has(opts.action.actionId)) return { kind: 'duplicate', previous: clone(this.actions.get(opts.action.actionId)!) };
+    const d = this.deliveries.get(id);
+    if (!d) return { kind: 'not_found' };
+    const b = this.store.bookings.get(d.trackingNumber)!;
+    const a = d.currentAssignmentId ? (this.assignments.get(d.currentAssignmentId) ?? null) : null;
+    const ctx: OpsContext = {
+      delivery: clone(d),
+      booking: clone(b),
+      assignment: a ? clone(a) : null,
+      podSecret: this.podSecrets.has(id) ? clone(this.podSecrets.get(id)!) : null,
+      driver: opts.driverUid && this.drivers.has(opts.driverUid) ? clone(this.drivers.get(opts.driverUid)!) : null,
+      now: this.clock.now,
+    };
+    const m = decide(ctx); // throws → nothing written (transaction aborted)
+    if (m.delivery) Object.assign(d, clone(m.delivery));
+    if (m.addDriverUid && !d.driverUids.includes(m.addDriverUid)) d.driverUids.push(m.addDriverUid);
+    if (m.booking) Object.assign(b, m.booking);
+    if (m.assignmentCreate) this.assignments.set(m.assignmentCreate.id, clone(m.assignmentCreate));
+    if (m.assignmentUpdate && a) Object.assign(a, m.assignmentUpdate);
+    if (m.podSecret === null) this.podSecrets.delete(id);
+    else if (m.podSecret) this.podSecrets.set(id, clone(m.podSecret));
+    if (m.pod) this.pods.set(m.pod.kind === 'return' ? `${id}_return` : id, clone(m.pod));
+    if (m.payment) this.store.payments.set(m.payment.id, clone(m.payment));
+    this.store.events.push(...(m.events ?? []));
+    for (const n of m.notifications ?? []) await this.store.queueNotification(n);
+    this.store.audit.push(...(m.audit ?? []));
+    if (opts.action) {
+      this.actions.set(opts.action.actionId, { ...opts.action, deliveryId: id, status: d.status, errorCode: m.fail?.code ?? null, errorMessage: m.fail?.message ?? null });
+    }
+    if (m.fail) throw m.fail;
+    return { kind: 'applied', delivery: clone(d) };
+  }
+  async getDriver(uid: string) {
+    const d = this.drivers.get(uid);
+    return d ? clone(d) : null;
+  }
+  async createDriver(d: DriverDoc) {
+    this.drivers.set(d.uid, clone(d));
+  }
+  async getVehicle(id: string) {
+    const v = this.vehicles.get(id);
+    return v ? clone(v) : null;
+  }
+  async upsertVehicle(v: VehicleDoc) {
+    this.vehicles.set(v.id, clone(v));
+  }
+  async startShift(uid: string, vehicleId: string, make: (d: DriverDoc, v: VehicleDoc) => DriverDoc['currentShift']) {
+    const d = this.drivers.get(uid);
+    const v = this.vehicles.get(vehicleId);
+    if (!d || d.status !== 'active') return { ok: false as const, code: 'DRIVER_UNAVAILABLE' as const };
+    if (!v) return { ok: false as const, code: 'VEHICLE_UNAVAILABLE' as const };
+    const cur = d.currentShift;
+    const active = cur && new Date(cur.activeUntil) > this.clock.now;
+    if (active && cur.vehicleId === vehicleId) return { ok: true as const, shift: clone(cur) };
+    if (active) return { ok: false as const, code: 'SHIFT_ACTIVE' as const };
+    if (!(v.status === 'available' || (v.status === 'in_use' && v.currentDriverUid === uid))) return { ok: false as const, code: 'VEHICLE_UNAVAILABLE' as const };
+    if (cur && cur.vehicleId !== vehicleId) {
+      const old = this.vehicles.get(cur.vehicleId);
+      if (old?.currentDriverUid === uid) Object.assign(old, { status: 'available', currentDriverUid: null });
+    }
+    const shift = make(d, v)!;
+    d.currentShift = shift;
+    Object.assign(v, { status: 'in_use', currentDriverUid: uid });
+    return { ok: true as const, shift: clone(shift) };
+  }
+  async endShift(uid: string) {
+    const d = this.drivers.get(uid);
+    if (!d?.currentShift) return 'no_shift' as const;
+    if ([...this.deliveries.values()].some((x) => x.currentDriverUid === uid && BUSY.includes(x.status))) return 'holding_packages' as const;
+    const v = this.vehicles.get(d.currentShift.vehicleId);
+    if (v?.currentDriverUid === uid) Object.assign(v, { status: 'available', currentDriverUid: null });
+    d.currentShift = null;
+    return 'ended' as const;
+  }
+  async listOverdueDeliveries(now: Date) {
+    return [...this.deliveries.values()].filter((d) => !d.delayed && d.expectedDeliveryAt < now.toISOString() && !['delivered', 'returned', 'cancelled'].includes(d.status)).map(clone);
+  }
+  async markDelayed(ids: string[]) {
+    for (const id of ids) this.deliveries.get(id)!.delayed = true;
+  }
+  async setEta(id: string, eta: DeliveryRecord['eta']) {
+    this.deliveries.get(id)!.eta = eta;
+  }
+  async createUploadTicket(t: { key: string; deliveryId: string; driverUid: string }) {
+    this.uploads.set(t.key, { deliveryId: t.deliveryId, driverUid: t.driverUid });
+  }
+  async getUploadTicket(key: string) {
+    return this.uploads.get(key) ?? null;
+  }
+}
+
+export class MemoryLive implements LivePort {
+  shifts = new Map<string, { shiftId: string; activeUntilMs: number }>();
+  locations = new Map<string, DriverLocation>();
+  async setShift(uid: string, s: { shiftId: string; activeUntilMs: number }) {
+    this.shifts.set(uid, s);
+  }
+  async clearShift(uid: string) {
+    this.shifts.delete(uid);
+    this.locations.delete(uid);
+  }
+  async getDriverLocation(uid: string) {
+    return this.locations.get(uid) ?? null;
+  }
+}
+
+export class MemoryEvidence implements EvidenceStore {
+  objects = new Set<string>();
+  async exists(key: string) {
+    return this.objects.has(key);
+  }
+}

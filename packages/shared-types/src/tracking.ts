@@ -1,5 +1,6 @@
 import type { BookingStatus, DeliveryStatus, DeliveryType, GhanaRegion, PaymentPreference, PaymentStatus, Urgency } from '@courier/constants';
 import type { Address, Contact, IsoDateString, PackageInfo } from './common.js';
+import type { LiveLocationView } from './operations.js';
 import type { PaymentSummary } from './payments.js';
 import type { PriceQuote } from './pricing.js';
 
@@ -26,8 +27,15 @@ export interface TrackingView {
   destination: { city: string; region: GhanaRegion };
   bookedAt: IsoDateString;
   timeline: TimelineEntry[];
-  /** Live driver location is only provided during an authorised active leg (Phase 3). */
-  liveLocation: null;
+  /**
+   * Driver position, only while that driver holds the package on an active leg
+   * (out for delivery; also en route to pickup for full access). Never for hubs/linehaul.
+   */
+  liveLocation: LiveLocationView | null;
+  delayed: boolean;
+  expectedDeliveryAt: IsoDateString | null;
+  /** Destination point for the map (city-level precision in public view). */
+  mapPoints: { pickup: { lat: number; lng: number } | null; destination: { lat: number; lng: number } };
   details?: {
     sender: Contact;
     recipient: Contact;

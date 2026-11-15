@@ -50,7 +50,7 @@ class Cached<T> {
 const toDate = (v: unknown): Date => (v instanceof Timestamp ? v.toDate() : (v as Date));
 
 /** Deep-convert Firestore Timestamps to Dates (top-level and nested plain objects). */
-function fromDoc<T>(data: FirebaseFirestore.DocumentData): T {
+export function fromDoc<T>(data: FirebaseFirestore.DocumentData): T {
   const conv = (v: unknown): unknown => {
     if (v instanceof Timestamp) return v.toDate();
     if (Array.isArray(v)) return v.map(conv);
@@ -62,7 +62,7 @@ function fromDoc<T>(data: FirebaseFirestore.DocumentData): T {
   return conv(data) as T;
 }
 
-function notificationDoc(n: NewNotification) {
+export function notificationDoc(n: NewNotification) {
   return { ...n, status: 'queued', attempts: 0, providerMessageId: null, error: null, createdAt: FieldValue.serverTimestamp() };
 }
 

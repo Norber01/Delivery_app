@@ -4,3 +4,4 @@ export * from './booking.js';
 export * from './network.js';
 export * from './payments.js';
 export * from './tracking.js';
+export * from './operations.js';

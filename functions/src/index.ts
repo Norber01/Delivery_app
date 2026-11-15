@@ -2,10 +2,11 @@ import { FIREBASE_REGION, ROLES, type Role } from '@courier/constants';
 import { MapboxProvider } from '@courier/shared-utils';
 import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
+import { getDatabase } from 'firebase-admin/database';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 import { setGlobalOptions } from 'firebase-functions/v2';
 import { defineSecret, defineString } from 'firebase-functions/params';
-import { onDocumentCreated } from 'firebase-functions/v2/firestore';
+import { onDocumentCreated, onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { onCall, onRequest, type CallableRequest } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { callerFromToken, requireRole } from './lib/auth.js';
@@ -28,7 +29,24 @@ import { getQuote as getQuoteService, type RequestMeta, type ServiceDeps } from 
 import { handleRefundEvent, reconcileRefunds, requestRefund } from './services/refundService.js';
 import { getTrackingView as getTrackingViewService } from './services/trackingService.js';
 import { FirestoreRateLimiter, FirestoreStore } from './store/firestoreStore.js';
-import type { NotificationRecord } from './store/types.js';
+import type { BookingRecord, NotificationRecord } from './store/types.js';
+import { randomInt } from 'node:crypto';
+import { FirestoreOpsStore, RtdbLive, WorkerEvidenceStore } from './ops/firestoreOps.js';
+import {
+  createDriverAccount as createDriverAccountService,
+  dispatchAction as dispatchActionService,
+  driverAction as driverActionService,
+  endShift as endShiftService,
+  ensureDeliveryForBooking,
+  flagDelayedDeliveries as flagDelayedService,
+  getEvidenceUrl as getEvidenceUrlService,
+  requestUpload as requestUploadService,
+  startShift as startShiftService,
+  upsertVehicle as upsertVehicleService,
+  type DriverIdentityPort,
+  type OpsDeps,
+} from './ops/opsService.js';
+import { fromDoc } from './store/firestoreStore.js';
 
 initializeApp();
 setGlobalOptions({ region: FIREBASE_REGION, maxInstances: 20 });
@@ -40,18 +58,40 @@ const PAYMENT_FALLBACK_EMAIL_DOMAIN = defineString('PAYMENT_FALLBACK_EMAIL_DOMAI
   description: 'Company-controlled domain for checkout emails when a customer gives none',
 });
 const SMS_SENDER_ID = defineString('SMS_SENDER_ID', { default: 'Courier' });
+const EDGE_WORKER_URL = defineString('EDGE_WORKER_URL', { description: 'Edge Worker origin serving /evidence (POD photos in R2)' });
 
 const MAPBOX_SERVER_TOKEN = defineSecret('MAPBOX_SERVER_TOKEN');
 const IP_HASH_SALT = defineSecret('IP_HASH_SALT');
 const PAYSTACK_SECRET_KEY = defineSecret('PAYSTACK_SECRET_KEY');
 const HUBTEL_SMS_CLIENT_ID = defineSecret('HUBTEL_SMS_CLIENT_ID');
 const HUBTEL_SMS_CLIENT_SECRET = defineSecret('HUBTEL_SMS_CLIENT_SECRET');
+const UPLOAD_SIGNING_SECRET = defineSecret('UPLOAD_SIGNING_SECRET');
 
 const db = getFirestore();
 // Optional fields normalise to undefined (see validation `optional`); omit them rather than fail.
 db.settings({ ignoreUndefinedProperties: true });
 const store = new FirestoreStore(db);
 const rateLimiter = new FirestoreRateLimiter(db);
+const opsStore = new FirestoreOpsStore(db);
+const live = new RtdbLive(getDatabase());
+
+/** Cryptographically random 6-digit delivery code. */
+const newOtp = () => String(randomInt(0, 1_000_000)).padStart(6, '0');
+
+function opsDeps(): OpsDeps {
+  const secret = UPLOAD_SIGNING_SECRET.value();
+  const workerUrl = EDGE_WORKER_URL.value();
+  return {
+    ops: opsStore,
+    live,
+    evidence: new WorkerEvidenceStore(workerUrl, secret),
+    now: () => new Date(),
+    newId: () => randomId(12),
+    newOtp,
+    site: site(),
+    uploads: { workerUrl, secret },
+  };
+}
 
 const site = () => ({
   publicUrl: PUBLIC_SITE_URL.value().replace(/\/$/, ''),
@@ -196,8 +236,8 @@ export const reconcilePayments = onSchedule(
 // ---- Tracking & accounts (Phase 2) ------------------------------------------
 
 /** Public tracking (tracking number) or full view (owner session / guest access code). */
-export const getTrackingView = callable([], (req) =>
-  getTrackingViewService({ store, rateLimiter }, req.data, callerFromToken(req.auth), meta(req)),
+export const getTrackingView = callable([MAPBOX_SERVER_TOKEN], (req) =>
+  getTrackingViewService({ store, rateLimiter, ops: opsStore, live, maps: deps().maps }, req.data, callerFromToken(req.auth), meta(req)),
 );
 
 const identity: IdentityPort = {
@@ -231,3 +271,60 @@ export const sendNotification = onDocumentCreated(
     await deliverNotification({ store, sms }, n);
   },
 );
+
+// ---- Operations (Phase 3) --------------------------------------------------------------
+
+/** Create the operational delivery once a booking is confirmed (cash at booking, online after payment). */
+export const onBookingWritten = onDocumentWritten({ document: 'deliveryRequests/{trackingNumber}', retry: true }, async (event) => {
+  const after = event.data?.after;
+  if (!after?.exists) return;
+  await ensureDeliveryForBooking({ ops: opsStore, now: () => new Date() }, fromDoc<BookingRecord>(after.data()!));
+});
+
+/** Dispatcher actions: assign, unassign, reschedule, reattempt, return, cancel, hold, release (MFA). */
+export const dispatchAction = callable([UPLOAD_SIGNING_SECRET], (req) => dispatchActionService(opsDeps(), callerFromToken(req.auth), req.data));
+
+/** Driver app actions (idempotent per actionId, so the offline queue can replay safely). */
+export const driverAction = callable([UPLOAD_SIGNING_SECRET], (req) => driverActionService(opsDeps(), callerFromToken(req.auth), req.data));
+
+export const startShift = callable([UPLOAD_SIGNING_SECRET], (req) => startShiftService(opsDeps(), callerFromToken(req.auth), req.data));
+export const endShift = callable([UPLOAD_SIGNING_SECRET], (req) => endShiftService(opsDeps(), callerFromToken(req.auth)));
+
+/** Signed R2 upload URL for a POD photo (assigned driver only). */
+export const requestUpload = callable([UPLOAD_SIGNING_SECRET], (req) => requestUploadService(opsDeps(), callerFromToken(req.auth), req.data));
+/** Short-lived view URL for a POD photo (ops staff, MFA). */
+export const getEvidenceUrl = callable([UPLOAD_SIGNING_SECRET], (req) => getEvidenceUrlService(opsDeps(), callerFromToken(req.auth), req.data));
+
+const driverIdentity: DriverIdentityPort = {
+  async createDriverUser(p) {
+    const auth = getAuth();
+    const user = await auth.createUser({ email: p.email, phoneNumber: p.phone, displayName: p.name, emailVerified: false });
+    // The driver sets their own password from this link; staff never see or send a password.
+    const setupLink = await auth.generatePasswordResetLink(p.email);
+    return { uid: user.uid, setupLink };
+  },
+  async setDriverClaims(uid) {
+    await getAuth().setCustomUserClaims(uid, { role: 'driver' });
+  },
+};
+
+/** Fleet manager / admin (MFA): create a driver sign-in and profile. */
+export const createDriverAccount = callable([], async (req) => {
+  const caller = callerFromToken(req.auth);
+  const result = await createDriverAccountService({ ops: opsStore }, driverIdentity, caller, req.data);
+  await store.writeAudit({ actorUid: caller.uid, actorRole: caller.role ?? 'guest', action: 'driver.create', targetType: 'driver', targetId: result.uid });
+  return result;
+});
+
+/** Fleet manager / admin (MFA): add or update a vehicle. */
+export const upsertVehicle = callable([], async (req) => {
+  const caller = callerFromToken(req.auth);
+  const result = await upsertVehicleService({ ops: opsStore }, caller, req.data);
+  await store.writeAudit({ actorUid: caller.uid, actorRole: caller.role ?? 'guest', action: 'vehicle.upsert', targetType: 'vehicle', targetId: result.id });
+  return result;
+});
+
+/** Mark deliveries past their promised window as delayed (shown on the dispatch board). */
+export const flagDelayedDeliveries = onSchedule({ schedule: 'every 15 minutes', timeoutSeconds: 120 }, async () => {
+  console.log('Delay check', await flagDelayedService({ ops: opsStore, now: () => new Date() }));
+});

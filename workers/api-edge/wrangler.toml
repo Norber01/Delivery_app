@@ -12,8 +12,18 @@ name = "GEOCODE_LIMITER"
 namespace_id = "1001"
 simple = { limit = 60, period = 60 }
 
+# Private bucket for proof-of-delivery photos (lifecycle rule: delete after 24 months).
+[[r2_buckets]]
+binding = "EVIDENCE"
+bucket_name = "courier-evidence-staging"
+
 # Secrets (set with `wrangler secret put`):
-#   MAPBOX_TOKEN  – server-side Mapbox token restricted to geocoding
+#   MAPBOX_TOKEN           – server-side Mapbox token restricted to geocoding
+#   UPLOAD_SIGNING_SECRET  – same value as the Cloud Functions secret of that name
+
+[[env.production.r2_buckets]]
+binding = "EVIDENCE"
+bucket_name = "courier-evidence"
 
 [env.production.vars]
 ALLOWED_ORIGINS = "https://www.example.com.gh,https://example.com.gh"

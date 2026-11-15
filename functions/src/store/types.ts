@@ -55,6 +55,8 @@ export interface TrackingEventRecord {
   /** Safe to show to anyone holding the tracking number. */
   publicMessage: string;
   internalNote?: string;
+  /** GPS checkpoint captured with the event (status changes only, not every ping). */
+  location?: { lat: number; lng: number };
   actorUid: string | null;
   actorRole: Role | 'guest' | 'system';
   occurredAt: Date;
@@ -79,7 +81,8 @@ export interface NotificationRecord extends NewNotification {
 export interface PaymentRecord {
   /** `${provider}_${reference}` — deterministic so a reference can never map to two records. */
   id: string;
-  provider: 'paystack';
+  /** `cash` = collected by a driver at pickup. */
+  provider: 'paystack' | 'cash';
   reference: string;
   trackingNumber: string;
   customerUid: string | null;
@@ -91,7 +94,9 @@ export interface PaymentRecord {
   reviewReason: string | null;
   channel: string | null;
   providerTransactionId: string | null;
-  verificationSource: 'webhook' | 'status_poll' | 'reconciliation' | null;
+  verificationSource: 'webhook' | 'status_poll' | 'reconciliation' | 'driver_collection' | null;
+  /** Driver who collected cash (provider = cash). */
+  collectedBy?: string;
   refundedPesewas: number;
   refundPendingPesewas: number;
   createdAt: Date;

@@ -145,3 +145,49 @@ describe('Phase 2: accounts, payments, tracking', () => {
     await assertFails(setDoc(doc(db, 'customers/alice'), { notificationPrefs: { isAdmin: true } }));
   });
 });
+
+describe('Phase 3: operations', () => {
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await setDoc(doc(db, 'deliveries/GHD1'), { currentDriverUid: 'kwame', driverUids: ['kwame'], status: 'out_for_delivery' });
+      await setDoc(doc(db, 'deliveries/GHD2'), { currentDriverUid: null, driverUids: ['kwame'], status: 'delivered' });
+      await setDoc(doc(db, 'deliveries/GHD3'), { currentDriverUid: 'esi', driverUids: ['esi'], status: 'assigned' });
+      await setDoc(doc(db, 'assignments/a1'), { driverUid: 'kwame', deliveryId: 'GHD1' });
+      await setDoc(doc(db, 'vehicles/v1'), { vehicleClass: 'motorbike' });
+      await setDoc(doc(db, 'proofOfDelivery/GHD2'), { receivedByName: 'Kofi' });
+      await setDoc(doc(db, 'podSecrets/GHD1'), { otpHash: 'x' });
+      await setDoc(doc(db, 'driverActions/x'), { status: 'delivered' });
+    });
+  });
+  const kwame = () => as('kwame', { role: 'driver' });
+
+  it('drivers read their current and past jobs only', async () => {
+    const { collection, query, where, getDocs } = await import('firebase/firestore');
+    await assertSucceeds(getDoc(doc(kwame(), 'deliveries/GHD1')));
+    await assertSucceeds(getDoc(doc(kwame(), 'deliveries/GHD2')));
+    await assertFails(getDoc(doc(kwame(), 'deliveries/GHD3')));
+    await assertSucceeds(getDocs(query(collection(kwame(), 'deliveries'), where('currentDriverUid', '==', 'kwame'))));
+    await assertSucceeds(getDocs(query(collection(kwame(), 'deliveries'), where('driverUids', 'array-contains', 'kwame'))));
+    await assertFails(getDocs(collection(kwame(), 'deliveries')));
+    // A customer with the same uid but no driver role reads nothing.
+    await assertFails(getDoc(doc(as('kwame', { role: 'customer' }), 'deliveries/GHD1')));
+  });
+
+  it('drivers cannot change deliveries, assignments or vehicles directly', async () => {
+    await assertFails(updateDoc(doc(kwame(), 'deliveries/GHD1'), { status: 'delivered' }));
+    await assertFails(updateDoc(doc(kwame(), 'assignments/a1'), { status: 'completed' }));
+    await assertFails(updateDoc(doc(kwame(), 'vehicles/v1'), { status: 'available' }));
+    await assertSucceeds(getDoc(doc(kwame(), 'vehicles/v1')));
+  });
+
+  it('delivery codes, action logs and POD stay server-side or staff-only', async () => {
+    await assertFails(getDoc(doc(kwame(), 'podSecrets/GHD1')));
+    await assertFails(getDoc(doc(as('adm', { role: 'admin', ...mfa }), 'podSecrets/GHD1')));
+    await assertFails(getDoc(doc(kwame(), 'driverActions/x')));
+    await assertFails(getDoc(doc(kwame(), 'proofOfDelivery/GHD2')));
+    await assertSucceeds(getDoc(doc(as('d', { role: 'dispatcher', ...mfa }), 'proofOfDelivery/GHD2')));
+    await assertSucceeds(getDoc(doc(as('d', { role: 'dispatcher', ...mfa }), 'deliveries/GHD3')));
+    await assertFails(getDoc(doc(as('d', { role: 'dispatcher' }), 'deliveries/GHD3')));
+  });
+});
