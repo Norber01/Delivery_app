@@ -40,7 +40,13 @@ function parse<T>(schema: { safeParse(v: unknown): { success: true; data: T } | 
 /** Called when a booking is written: create its delivery once it is confirmed (idempotent). */
 export async function ensureDeliveryForBooking(deps: Pick<OpsDeps, 'ops' | 'now'>, booking: BookingRecord): Promise<'created' | 'exists' | 'not_ready'> {
   if (booking.status !== 'confirmed' || booking.deliveryId) return 'not_ready';
-  return deps.ops.createDelivery(buildDelivery(booking, deps.now()));
+  // Intercity: resolve hubs and route now; if the network is not set up the delivery is still
+  // created (hubs null) and dispatch is told to configure it before assigning.
+  const network =
+    booking.deliveryType === 'intercity' && booking.destinationAreaId
+      ? await deps.ops.findNetworkRoute(booking.pickupAreaId, booking.destinationAreaId)
+      : null;
+  return deps.ops.createDelivery(buildDelivery(booking, deps.now(), network));
 }
 
 function checkScope(caller: Caller, serviceAreaId: string) {
@@ -52,8 +58,20 @@ function checkScope(caller: Caller, serviceAreaId: string) {
 export async function dispatchAction(deps: OpsDeps, caller: Caller, raw: unknown) {
   requireRole(caller, DISPATCH_ROLES);
   const a = parse(dispatchActionSchema, raw);
+  // Intercity deliveries created before their network existed: resolve hubs now.
+  const before = await deps.ops.getDelivery(a.deliveryId);
+  const network =
+    a.type === 'assign' && before?.deliveryType === 'intercity' && !before.originHub && before.destinationAreaId
+      ? await deps.ops.findNetworkRoute(before.serviceAreaId, before.destinationAreaId)
+      : null;
   const outcome = await deps.ops.runDeliveryTx(a.deliveryId, { driverUid: a.driverUid }, (ctx) => {
-    checkScope(caller, ctx.delivery.serviceAreaId);
+    const isLastMile = ctx.delivery.legs.find((l) => l.id === ctx.delivery.currentLegId)?.type === 'last_mile';
+    checkScope(caller, isLastMile && ctx.delivery.destinationAreaId ? ctx.delivery.destinationAreaId : ctx.delivery.serviceAreaId);
+    if (network && !ctx.delivery.originHub) {
+      ctx.delivery = { ...ctx.delivery, originHub: network.originHub, destinationHub: network.destinationHub, routeId: network.route.id };
+      const m = decideDispatch(ctx, a, { actor: { uid: caller.uid, role: caller.role }, newId: deps.newId, newOtp: deps.newOtp, site: deps.site });
+      return { ...m, delivery: { originHub: network.originHub, destinationHub: network.destinationHub, routeId: network.route.id, ...(m.delivery ?? {}) } };
+    }
     return decideDispatch(ctx, a, { actor: { uid: caller.uid, role: caller.role }, newId: deps.newId, newOtp: deps.newOtp, site: deps.site });
   });
   if (outcome.kind === 'not_found') throw new AppError('DELIVERY_NOT_FOUND', 'Delivery not found.', 'not-found');

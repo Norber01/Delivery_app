@@ -47,6 +47,7 @@ import {
   type OpsDeps,
 } from './ops/opsService.js';
 import { fromDoc } from './store/firestoreStore.js';
+import * as hubService from './ops/hubService.js';
 
 initializeApp();
 setGlobalOptions({ region: FIREBASE_REGION, maxInstances: 20 });
@@ -328,3 +329,18 @@ export const upsertVehicle = callable([], async (req) => {
 export const flagDelayedDeliveries = onSchedule({ schedule: 'every 15 minutes', timeoutSeconds: 120 }, async () => {
   console.log('Delay check', await flagDelayedService({ ops: opsStore, now: () => new Date() }));
 });
+
+// ---- Hubs, routes and manifests (Phase 4) ------------------------------------------------
+
+/** Admin (MFA): create/update a hub; routes connect primary hubs of different service areas. */
+export const upsertHub = callable([], (req) => hubService.upsertHub({ ops: opsStore }, callerFromToken(req.auth), req.data));
+export const upsertRoute = callable([], (req) => hubService.upsertRoute({ ops: opsStore }, callerFromToken(req.auth), req.data));
+
+/** Hub operator (MFA, own hubs): receive a parcel, or hand it to its assigned last-mile driver. */
+export const hubScan = callable([UPLOAD_SIGNING_SECRET], (req) => hubService.hubScan(opsDeps(), callerFromToken(req.auth), req.data));
+
+/** Linehaul manifests: create, load/unload parcels, seal/reopen/depart/arrive/close. */
+export const createManifest = callable([UPLOAD_SIGNING_SECRET], (req) => hubService.createManifest(opsDeps(), callerFromToken(req.auth), req.data));
+export const addToManifest = callable([UPLOAD_SIGNING_SECRET], (req) => hubService.manifestParcel(opsDeps(), callerFromToken(req.auth), req.data, 'add'));
+export const removeFromManifest = callable([UPLOAD_SIGNING_SECRET], (req) => hubService.manifestParcel(opsDeps(), callerFromToken(req.auth), req.data, 'remove'));
+export const manifestAction = callable([UPLOAD_SIGNING_SECRET], (req) => hubService.manifestAction(opsDeps(), callerFromToken(req.auth), req.data));

@@ -1,5 +1,5 @@
 import { COLLECTIONS } from '@courier/constants';
-import type { DriverDoc, DriverLocation, VehicleDoc } from '@courier/shared-types';
+import type { DriverDoc, DriverLocation, HubDoc, ManifestDoc, RouteDoc, VehicleDoc } from '@courier/shared-types';
 import { evidenceUrl } from '@courier/shared-utils';
 import type { Database } from 'firebase-admin/database';
 import { FieldValue, Timestamp, type Firestore } from 'firebase-admin/firestore';
@@ -12,6 +12,9 @@ import type {
   DriverActionRecord,
   EvidenceStore,
   LivePort,
+  ManifestContext,
+  ManifestMutation,
+  NetworkRoute,
   OpsContext,
   OpsMutation,
   OpsOutcome,
@@ -20,7 +23,7 @@ import type {
 } from './types.js';
 
 /** Statuses in which a driver is holding a package or has an open job. */
-export const DRIVER_BUSY_STATUSES = ['assigned', 'en_route_to_pickup', 'out_for_delivery', 'delivery_failed', 'returning_to_sender'];
+export const DRIVER_BUSY_STATUSES = ['assigned', 'en_route_to_pickup', 'picked_up', 'at_destination_hub', 'out_for_delivery', 'delivery_failed', 'returning_to_sender'];
 const TERMINAL = ['delivered', 'returned', 'cancelled'];
 
 export class FirestoreOpsStore implements OpsStore {
@@ -66,11 +69,14 @@ export class FirestoreOpsStore implements OpsStore {
       const bookingRef = this.col('deliveryRequests').doc(delivery.trackingNumber);
       const assignmentRef = delivery.currentAssignmentId ? this.col('assignments').doc(delivery.currentAssignmentId) : null;
       const driverRef = opts.driverUid ? this.col('drivers').doc(opts.driverUid) : null;
-      const [bSnap, aSnap, pSnap, drSnap] = await Promise.all([
+      const manifestId = delivery.legs.find((l) => l.id === delivery.currentLegId)?.manifestId ?? null;
+      const manifestRef = manifestId ? this.col('manifests').doc(manifestId) : null;
+      const [bSnap, aSnap, pSnap, drSnap, mSnap] = await Promise.all([
         tx.get(bookingRef),
         assignmentRef ? tx.get(assignmentRef) : null,
         tx.get(podRef),
         driverRef ? tx.get(driverRef) : null,
+        manifestRef ? tx.get(manifestRef) : null,
       ]);
       const ctx: OpsContext = {
         delivery,
@@ -78,9 +84,11 @@ export class FirestoreOpsStore implements OpsStore {
         assignment: aSnap?.exists ? fromDoc<AssignmentRecord>(aSnap.data()!) : null,
         podSecret: pSnap.exists ? fromDoc<PodSecret>(pSnap.data()!) : null,
         driver: drSnap?.exists ? (drSnap.data() as DriverDoc) : null,
+        manifest: mSnap?.exists ? (mSnap.data() as ManifestDoc) : null,
         now: new Date(),
       };
       const m = decide(ctx);
+      if (m.manifestReceived && manifestRef) tx.update(manifestRef, { receivedIds: FieldValue.arrayUnion(m.manifestReceived) });
 
       if (m.delivery || m.addDriverUid) {
         tx.update(deliveryRef, {
@@ -164,18 +172,81 @@ export class FirestoreOpsStore implements OpsStore {
   async endShift(uid: string) {
     const driverRef = this.col('drivers').doc(uid);
     return this.db.runTransaction(async (tx) => {
-      const [dSnap, busy] = await Promise.all([
+      const [dSnap, busy, linehaul] = await Promise.all([
         tx.get(driverRef),
         tx.get(this.col('deliveries').where('currentDriverUid', '==', uid).where('status', 'in', DRIVER_BUSY_STATUSES).limit(1)),
+        tx.get(this.col('manifests').where('driverUid', '==', uid).where('status', '==', 'departed').limit(1)),
       ]);
       const shift = (dSnap.data() as DriverDoc | undefined)?.currentShift;
       if (!shift) return 'no_shift' as const;
-      if (!busy.empty) return 'holding_packages' as const;
+      if (!busy.empty || !linehaul.empty) return 'holding_packages' as const;
       const vehicleRef = this.col('vehicles').doc(shift.vehicleId);
       const v = await tx.get(vehicleRef);
       tx.update(driverRef, { currentShift: null });
       if (v.exists && v.get('currentDriverUid') === uid) tx.update(vehicleRef, { status: 'available', currentDriverUid: null });
       return 'ended' as const;
+    });
+  }
+
+  // ---- Network & manifests ----------------------------------------------------------
+
+  async getHub(id: string) {
+    const s = await this.col('hubs').doc(id).get();
+    return s.exists ? (s.data() as HubDoc) : null;
+  }
+  async upsertHub(h: HubDoc) {
+    await this.col('hubs').doc(h.id).set({ ...h, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+  }
+  async getRoute(id: string) {
+    const s = await this.col('routes').doc(id).get();
+    return s.exists ? (s.data() as RouteDoc) : null;
+  }
+  async upsertRoute(r: RouteDoc) {
+    await this.col('routes').doc(r.id).set({ ...r, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+  }
+  async findNetworkRoute(originAreaId: string, destinationAreaId: string): Promise<NetworkRoute | null> {
+    const primary = async (areaId: string) => {
+      const s = await this.col('hubs').where('serviceAreaId', '==', areaId).where('primaryForArea', '==', true).where('active', '==', true).limit(1).get();
+      return s.empty ? null : (s.docs[0]!.data() as HubDoc);
+    };
+    const [o, d] = await Promise.all([primary(originAreaId), primary(destinationAreaId)]);
+    if (!o || !d) return null;
+    const r = await this.col('routes').where('originHubId', '==', o.id).where('destinationHubId', '==', d.id).where('active', '==', true).limit(1).get();
+    if (r.empty) return null;
+    const ref = (h: HubDoc) => ({ id: h.id, code: h.code, name: h.name, city: h.city, location: h.location });
+    return { route: r.docs[0]!.data() as RouteDoc, originHub: ref(o), destinationHub: ref(d) };
+  }
+  async createManifest(m: ManifestDoc) {
+    await this.col('manifests').doc(m.id).create({ ...m, createdAt: FieldValue.serverTimestamp() });
+  }
+  async getManifest(id: string) {
+    const s = await this.col('manifests').doc(id).get();
+    return s.exists ? (s.data() as ManifestDoc) : null;
+  }
+  async runManifestTx(manifestId: string, deliveryIds: string[] | 'all', decide: (ctx: ManifestContext) => ManifestMutation) {
+    const mRef = this.col('manifests').doc(manifestId);
+    return this.db.runTransaction(async (tx) => {
+      const mSnap = await tx.get(mRef);
+      if (!mSnap.exists) return null;
+      const manifest = mSnap.data() as ManifestDoc;
+      const ids = deliveryIds === 'all' ? manifest.deliveryIds : deliveryIds;
+      const [deliveries, driver, route] = await Promise.all([
+        ids.length ? tx.getAll(...ids.map((id) => this.col('deliveries').doc(id))) : Promise.resolve([]),
+        tx.get(this.col('drivers').doc(manifest.driverUid)),
+        tx.get(this.col('routes').doc(manifest.routeId)),
+      ]);
+      const m = decide({
+        manifest,
+        deliveries: deliveries.filter((d) => d.exists).map((d) => fromDoc<DeliveryRecord>(d.data()!)),
+        driver: driver.exists ? (driver.data() as DriverDoc) : null,
+        route: route.exists ? (route.data() as RouteDoc) : null,
+        now: new Date(),
+      });
+      if (m.manifest) tx.update(mRef, { ...m.manifest, updatedAt: FieldValue.serverTimestamp() });
+      for (const u of m.deliveries ?? []) tx.update(this.col('deliveries').doc(u.id), { ...u.patch, updatedAt: FieldValue.serverTimestamp() });
+      for (const e of m.events ?? []) tx.create(this.col('trackingEvents').doc(), e);
+      for (const a of m.audit ?? []) tx.create(this.col('auditLogs').doc(), { ...a, at: FieldValue.serverTimestamp() });
+      return { ...manifest, ...(m.manifest ?? {}) };
     });
   }
 

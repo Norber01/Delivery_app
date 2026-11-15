@@ -193,3 +193,28 @@ describe('Phase 3: operations', () => {
     await assertFails(getDoc(doc(as('d', { role: 'dispatcher' }), 'deliveries/GHD3')));
   });
 });
+
+describe('Phase 4: hubs and manifests', () => {
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await setDoc(doc(db, 'manifests/m1'), { driverUid: 'trucker', status: 'departed', deliveryIds: ['GHD1'] });
+      await setDoc(doc(db, 'hubs/acc-01'), { name: 'Accra Central Hub' });
+    });
+  });
+
+  it('manifests are visible to hub/ops staff with MFA and to their own linehaul driver only', async () => {
+    await assertSucceeds(getDoc(doc(as('h', { role: 'hub_operator', hubIds: ['acc-01'], ...mfa }), 'manifests/m1')));
+    await assertFails(getDoc(doc(as('h', { role: 'hub_operator', hubIds: ['acc-01'] }), 'manifests/m1')));
+    await assertSucceeds(getDoc(doc(as('trucker', { role: 'driver' }), 'manifests/m1')));
+    await assertFails(getDoc(doc(as('kwame', { role: 'driver' }), 'manifests/m1')));
+    await assertFails(getDoc(doc(as('c', { role: 'customer' }), 'manifests/m1')));
+  });
+
+  it('nobody writes manifests or hubs from a client', async () => {
+    await assertFails(updateDoc(doc(as('h', { role: 'hub_operator', hubIds: ['acc-01'], ...mfa }), 'manifests/m1'), { status: 'arrived' }));
+    await assertFails(updateDoc(doc(as('trucker', { role: 'driver' }), 'manifests/m1'), { status: 'arrived' }));
+    await assertFails(setDoc(doc(as('a', { role: 'admin', ...mfa }), 'hubs/acc-02'), { name: 'X' }));
+    await assertSucceeds(getDoc(doc(guest(), 'hubs/acc-01'))); // hub addresses are public
+  });
+});

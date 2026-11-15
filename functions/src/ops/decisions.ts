@@ -18,7 +18,13 @@ import type { ValidDispatchAction, ValidDriverAction } from '@courier/validation
 import { AppError } from '../lib/errors.js';
 import { sha256Hex } from '../lib/hash.js';
 import type { BookingRecord, NewNotification, TrackingEventRecord } from '../store/types.js';
-import type { AssignmentRecord, DeliveryRecord, OpsContext, OpsMutation, PodSecret } from './types.js';
+import type { AssignmentRecord, DeliveryRecord, NetworkRoute, OpsContext, OpsMutation, PodSecret } from './types.js';
+import type { VehicleClass } from '@courier/constants';
+
+/** Smallest class for a weight when pricing chose none (intercity): first/last-mile vehicle check. */
+export function vehicleClassForWeight(kg: number): VehicleClass {
+  return kg <= 20 ? 'motorbike' : kg <= 100 ? 'car' : kg <= 1000 ? 'van' : 'truck';
+}
 
 export interface Site {
   publicUrl: string;
@@ -65,7 +71,7 @@ const updateLeg = (legs: ShipmentLeg[], legId: string | null, patch: Partial<Shi
 // ---- Delivery creation -------------------------------------------------------------
 
 /** Build the operational delivery for a confirmed booking. */
-export function buildDelivery(b: BookingRecord, now: Date): DeliveryRecord {
+export function buildDelivery(b: BookingRecord, now: Date, network: NetworkRoute | null = null): DeliveryRecord {
   const legs: ShipmentLeg[] =
     b.deliveryType === 'intercity'
       ? (['first_mile', 'linehaul', 'last_mile'] as const).map((type, i) => ({
@@ -88,7 +94,13 @@ export function buildDelivery(b: BookingRecord, now: Date): DeliveryRecord {
     heldFrom: null,
     holdReason: null,
     serviceAreaId: b.pickupAreaId,
-    requiredVehicleClass: b.price.vehicleClass,
+    requiredVehicleClass: b.price.vehicleClass ?? vehicleClassForWeight(b.price.chargeableWeightKg),
+    destinationAreaId: b.destinationAreaId,
+    chargeableWeightKg: b.price.chargeableWeightKg,
+    originHub: network?.originHub ?? null,
+    destinationHub: network?.destinationHub ?? null,
+    routeId: network?.route.id ?? null,
+    linehaul: null,
     sender: b.sender,
     recipient: b.recipient,
     pickup: b.pickup,
@@ -157,15 +169,26 @@ export function decideDispatch(ctx: OpsContext, a: ValidDispatchAction, deps: Di
 
   switch (a.type) {
     case 'assign': {
-      ensureTransition(d.status, 'assigned');
-      if (!leg || leg.type !== 'direct') {
-        throw new AppError('PHASE_NOT_AVAILABLE', 'Intercity deliveries move through hubs and are dispatched from hub operations (Phase 4).');
+      if (!leg || leg.type === 'linehaul') {
+        throw new AppError('INVALID_TRANSITION', 'This parcel travels between hubs on a manifest. Use the hub screen.');
+      }
+      const lastMile = leg.type === 'last_mile';
+      if (lastMile) {
+        if (d.status !== 'at_destination_hub' || d.currentAssignmentId) {
+          throw new AppError('INVALID_TRANSITION', 'The parcel must be at the destination hub with no driver assigned.');
+        }
+      } else {
+        ensureTransition(d.status, 'assigned');
+      }
+      if (leg.type !== 'direct' && (!d.originHub || !d.destinationHub)) {
+        throw new AppError('HUB_NOT_CONFIGURED', 'No hubs or route are set up between these cities. Configure the network first.');
       }
       const driver = ctx.driver;
       if (!driverIsAvailable(driver, ctx) || driver.uid !== a.driverUid) {
         throw new AppError('DRIVER_UNAVAILABLE', 'This driver is not on an active shift.');
       }
-      if (driver.currentShift.serviceAreaId !== d.serviceAreaId) {
+      const area = lastMile ? d.destinationAreaId : d.serviceAreaId;
+      if (driver.currentShift.serviceAreaId !== area) {
         throw new AppError('DRIVER_UNAVAILABLE', 'This driver is working in a different service area.');
       }
       if (d.requiredVehicleClass && VEHICLE_RANK[driver.currentShift.vehicleClass] < VEHICLE_RANK[d.requiredVehicleClass]) {
@@ -187,17 +210,37 @@ export function decideDispatch(ctx: OpsContext, a: ValidDispatchAction, deps: Di
         assignmentCreate: assignment,
         addDriverUid: driver.uid,
         delivery: {
-          status: 'assigned',
+          // Last mile: the parcel stays at the hub until the hub team hands it to the driver.
+          status: lastMile ? 'at_destination_hub' : 'assigned',
           currentAssignmentId: assignment.id,
           currentDriverUid: driver.uid,
           legs: updateLeg(d.legs, leg.id, { status: 'assigned', assignmentId: assignment.id, driverUid: driver.uid, vehicleId: assignment.vehicleId }),
           openException: null,
         },
-        events: [event(ctx, 'assigned', 'Driver assigned', actor, { internalNote: `Assigned to ${driver.name} (${driver.currentShift.vehicleClass})` })],
+        events: [
+          event(ctx, 'assigned', lastMile ? 'Driver assigned for final delivery' : 'Driver assigned', actor, {
+            internalNote: `${leg.type} assigned to ${driver.name} (${driver.currentShift.vehicleClass})`,
+          }),
+        ],
         audit,
       };
     }
     case 'unassign': {
+      if (leg?.type === 'last_mile') {
+        if (d.status !== 'at_destination_hub' || ctx.assignment?.status !== 'assigned') {
+          throw new AppError('INVALID_TRANSITION', 'Only a last-mile driver who has not collected the parcel can be unassigned.');
+        }
+        return {
+          assignmentUpdate: { status: 'cancelled', endedAt: ctx.now },
+          delivery: {
+            currentAssignmentId: null,
+            currentDriverUid: null,
+            legs: updateLeg(d.legs, d.currentLegId, { status: 'planned', assignmentId: null, driverUid: null, vehicleId: null }),
+          },
+          events: [event(ctx, 'unassigned', PUBLIC_STATUS_LABELS.at_destination_hub, actor)],
+          audit,
+        };
+      }
       ensureTransition(d.status, 'awaiting_assignment');
       if (d.status !== 'assigned') throw new AppError('INVALID_TRANSITION', 'Only deliveries not yet started can be unassigned.');
       return {
@@ -233,6 +276,12 @@ export function decideDispatch(ctx: OpsContext, a: ValidDispatchAction, deps: Di
       };
     }
     case 'return_to_sender': {
+      if (d.deliveryType === 'intercity') {
+        throw new AppError(
+          'PHASE_NOT_AVAILABLE',
+          'Intercity returns are not automated yet: have the driver bring the parcel back to the hub, hold it, and arrange the return with the sender.',
+        );
+      }
       ensureTransition(d.status, 'returning_to_sender');
       if (d.custodian.type !== 'driver') throw new AppError('PHASE_NOT_AVAILABLE', 'Returns from a hub are handled by hub operations (Phase 4).');
       return {
@@ -335,21 +384,22 @@ export function decideDriverAction(ctx: OpsContext, a: ValidDriverAction, deps: 
       if (collect && !a.cashCollected) {
         throw new AppError('CASH_NOT_CONFIRMED', `Collect ${formatGhs(d.collectOnPickupPesewas)} from the sender before taking the package.`);
       }
-      const { secret, notification } = issueOtp(ctx, deps);
+      const toHub = d.legs.find((l) => l.id === d.currentLegId)?.type === 'first_mile';
+      // Intercity first mile ends at the origin hub (scanned in there); direct pickups go straight out.
+      const otp = toHub ? null : issueOtp(ctx, deps);
       const m: OpsMutation = {
-        podSecret: secret,
+        ...(otp ? { podSecret: otp.secret } : {}),
         delivery: {
-          status: 'out_for_delivery',
+          status: toHub ? 'picked_up' : 'out_for_delivery',
           custodian: { type: 'driver', id: uid },
           collectOnPickupPesewas: 0,
           openException: null,
-          attempts: d.attempts + 1,
+          ...(toHub ? {} : { attempts: d.attempts + 1 }),
         },
-        events: [
-          event(ctx, 'picked_up', PUBLIC_STATUS_LABELS.picked_up, actor, at),
-          event(ctx, 'out_for_delivery', PUBLIC_STATUS_LABELS.out_for_delivery, actor, at, 1),
-        ],
-        notifications: [notification],
+        events: toHub
+          ? [event(ctx, 'picked_up', `Package collected — on the way to our ${d.originHub?.city ?? ''} hub`.trim(), actor, at)]
+          : [event(ctx, 'picked_up', PUBLIC_STATUS_LABELS.picked_up, actor, at), event(ctx, 'out_for_delivery', PUBLIC_STATUS_LABELS.out_for_delivery, actor, at, 1)],
+        notifications: otp ? [otp.notification] : [],
         audit,
       };
       if (collect) {

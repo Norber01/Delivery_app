@@ -152,7 +152,7 @@ describe('dispatch', () => {
     await expectCode(dispatchAction(deps, kwame, { type: 'hold', deliveryId: b.trackingNumber, reason: 'x x x' }), 'PERMISSION_DENIED');
   });
 
-  it('defers intercity deliveries to hub operations (Phase 4)', async () => {
+  it('refuses intercity assignment until hubs and a route are configured', async () => {
     const q = await import('../src/services/quoteService.js');
     const bk = await import('../src/services/bookingService.js');
     const kumasi = { line1: 'Adum', city: 'Kumasi', region: 'Ashanti', location: { lat: 6.6966, lng: -1.6233 } };
@@ -167,7 +167,7 @@ describe('dispatch', () => {
     await ensureDeliveryForBooking(deps, w.store.bookings.get(r.trackingNumber)!);
     expect(ops.deliveries.get(r.trackingNumber)!.legs.map((l) => l.type)).toEqual(['first_mile', 'linehaul', 'last_mile']);
     await startShift(deps, kwame, { vehicleId: 'bike1' });
-    await expectCode(dispatch('assign', r.trackingNumber, { driverUid: 'kwame' }), 'PHASE_NOT_AVAILABLE');
+    await expectCode(dispatch('assign', r.trackingNumber, { driverUid: 'kwame' }), 'HUB_NOT_CONFIGURED');
   });
 
   it('unassigns before start, cancels before pickup (cancelling the booking), and holds/releases', async () => {

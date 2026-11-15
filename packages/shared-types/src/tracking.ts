@@ -33,6 +33,12 @@ export interface TrackingView {
    */
   liveLocation: LiveLocationView | null;
   delayed: boolean;
+  /** Intercity: where the parcel is in the hub network (no vehicle or driver positions). */
+  network: {
+    originHub: { name: string; city: string } | null;
+    destinationHub: { name: string; city: string } | null;
+    expectedArrivalAtHub: IsoDateString | null;
+  } | null;
   expectedDeliveryAt: IsoDateString | null;
   /** Destination point for the map (city-level precision in public view). */
   mapPoints: { pickup: { lat: number; lng: number } | null; destination: { lat: number; lng: number } };

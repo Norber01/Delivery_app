@@ -1,0 +1,14 @@
+{
+  "$comment": "ILLUSTRATIVE network. Replace with the company's real hubs, addresses, coordinates and schedules.",
+  "hubs": [
+    { "id": "acc-01", "code": "ACC-01", "name": "Accra Central Hub", "type": "hub", "serviceAreaId": "accra", "city": "Accra", "primaryForArea": true, "address": "Ring Road Central, Accra", "location": { "lat": 5.5711, "lng": -0.2118 }, "active": true },
+    { "id": "ksi-01", "code": "KSI-01", "name": "Kumasi Hub", "type": "hub", "serviceAreaId": "kumasi", "city": "Kumasi", "primaryForArea": true, "address": "Suame Roundabout, Kumasi", "location": { "lat": 6.7205, "lng": -1.6293 }, "active": true },
+    { "id": "tko-01", "code": "TKO-01", "name": "Takoradi Hub", "type": "hub", "serviceAreaId": "takoradi", "city": "Takoradi", "primaryForArea": true, "address": "Market Circle, Takoradi", "location": { "lat": 4.8986, "lng": -1.7554 }, "active": true }
+  ],
+  "routes": [
+    { "id": "acc-ksi", "code": "ACC-KSI", "originHubId": "acc-01", "destinationHubId": "ksi-01", "distanceKm": 250, "typicalDurationMinutes": 330, "schedule": { "daysOfWeek": [1, 2, 3, 4, 5, 6], "departureTimes": ["18:00"] }, "active": true },
+    { "id": "ksi-acc", "code": "KSI-ACC", "originHubId": "ksi-01", "destinationHubId": "acc-01", "distanceKm": 250, "typicalDurationMinutes": 330, "schedule": { "daysOfWeek": [1, 2, 3, 4, 5, 6], "departureTimes": ["18:00"] }, "active": true },
+    { "id": "acc-tko", "code": "ACC-TKO", "originHubId": "acc-01", "destinationHubId": "tko-01", "distanceKm": 230, "typicalDurationMinutes": 300, "schedule": { "daysOfWeek": [1, 3, 5], "departureTimes": ["19:00"] }, "active": true },
+    { "id": "tko-acc", "code": "TKO-ACC", "originHubId": "tko-01", "destinationHubId": "acc-01", "distanceKm": 230, "typicalDurationMinutes": 300, "schedule": { "daysOfWeek": [2, 4, 6], "departureTimes": ["19:00"] }, "active": true }
+  ]
+}

@@ -13,7 +13,7 @@ import { readFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 import { initializeApp } from 'firebase-admin/app';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
-import { issuesToFieldErrors, pricingRuleSetSchema, serviceAreaSchema } from '@courier/validation';
+import { hubSchema, issuesToFieldErrors, pricingRuleSetSchema, routeSchema, serviceAreaSchema } from '@courier/validation';
 import { z } from 'zod';
 import { FirestoreStore } from '../src/store/firestoreStore.js';
 
@@ -22,6 +22,7 @@ const { values } = parseArgs({
     project: { type: 'string' },
     pricing: { type: 'string', default: new URL('../../firebase/seed/pricing-rules.sample.json', import.meta.url).pathname },
     areas: { type: 'string', default: new URL('../../firebase/seed/service-areas.sample.json', import.meta.url).pathname },
+    network: { type: 'string', default: new URL('../../firebase/seed/network.sample.json', import.meta.url).pathname },
     'skip-pricing': { type: 'boolean', default: false },
   },
 });
@@ -38,6 +39,21 @@ for (const a of areas) {
 }
 await batch.commit();
 console.log(`Upserted ${areas.length} service areas`);
+
+// Hubs and intercity routes (validated with the same schemas as the admin functions).
+const network = JSON.parse(await readFile(values.network!, 'utf8')) as { hubs: unknown[]; routes: unknown[] };
+const hubs = z.array(hubSchema).parse(network.hubs);
+const routes = z.array(routeSchema).parse(network.routes);
+const nb = db.batch();
+for (const h of hubs) nb.set(db.collection('hubs').doc(h.id), { ...h, phone: h.phone ?? null }, { merge: true });
+for (const r of routes) {
+  const o = hubs.find((h) => h.id === r.originHubId);
+  const d = hubs.find((h) => h.id === r.destinationHubId);
+  if (!o || !d) throw new Error(`Route ${r.id} references an unknown hub`);
+  nb.set(db.collection('routes').doc(r.id), { ...r, originAreaId: o.serviceAreaId, destinationAreaId: d.serviceAreaId }, { merge: true });
+}
+await nb.commit();
+console.log(`Upserted ${hubs.length} hubs and ${routes.length} routes`);
 
 if (!values['skip-pricing']) {
   const raw = JSON.parse(await readFile(values.pricing!, 'utf8'));

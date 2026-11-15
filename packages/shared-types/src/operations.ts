@@ -1,4 +1,5 @@
 import type {
+  ManifestStatus,
   AssignmentStatus,
   DeliveryStatus,
   DeliveryType,
@@ -25,6 +26,44 @@ export interface ShipmentLeg {
   assignmentId: string | null;
   driverUid: string | null;
   vehicleId: string | null;
+  /** Linehaul legs: the manifest carrying the parcel. */
+  manifestId?: string | null;
+}
+
+/** Denormalised hub details carried on intercity deliveries. */
+export interface HubRef {
+  id: string;
+  code: string;
+  name: string;
+  city: string;
+  location: LatLng;
+}
+
+/** `manifests/{id}`: one linehaul departure of one vehicle on one route. */
+export interface ManifestDoc {
+  id: string;
+  /** Human-readable number, e.g. ACC-KSI-20261116-1800. */
+  number: string;
+  routeId: string;
+  routeCode: string;
+  originHubId: string;
+  destinationHubId: string;
+  vehicleId: string;
+  vehicleRegistration: string;
+  capacityKg: number;
+  driverUid: string;
+  driverName: string;
+  scheduledDepartureAt: IsoDateString;
+  status: ManifestStatus;
+  deliveryIds: string[];
+  totalWeightKg: number;
+  receivedIds: string[];
+  missingIds: string[];
+  departedAt: IsoDateString | null;
+  expectedArrivalAt: IsoDateString | null;
+  arrivedAt: IsoDateString | null;
+  closedAt: IsoDateString | null;
+  createdBy: string;
 }
 
 export type Custodian = { type: 'none' } | { type: 'driver'; id: string } | { type: 'hub'; id: string } | { type: 'vehicle'; id: string };
@@ -50,7 +89,10 @@ export interface DeliveryDoc {
   /** Status before `on_hold`, restored on release. */
   heldFrom: DeliveryStatus | null;
   holdReason: string | null;
+  /** Pickup service area (first mile / direct dispatch). */
   serviceAreaId: string;
+  /** Destination service area (last-mile dispatch), null when outside any area. */
+  destinationAreaId: string | null;
   requiredVehicleClass: VehicleClass | null;
   sender: Contact;
   recipient: Contact;
@@ -62,6 +104,14 @@ export interface DeliveryDoc {
   paymentPreference: PaymentPreference;
   /** Amount the driver must collect at pickup (cash bookings not yet paid), else 0. */
   collectOnPickupPesewas: number;
+  /** From the confirmed price; used for manifest capacity. */
+  chargeableWeightKg: number;
+  /** Intercity only: hubs and route resolved at creation from the operational network. */
+  originHub: HubRef | null;
+  destinationHub: HubRef | null;
+  routeId: string | null;
+  /** Intercity: current linehaul (set on departure). */
+  linehaul: { manifestId: string; departedAt: IsoDateString; expectedArrivalAt: IsoDateString } | null;
   legs: ShipmentLeg[];
   currentLegId: string | null;
   currentAssignmentId: string | null;

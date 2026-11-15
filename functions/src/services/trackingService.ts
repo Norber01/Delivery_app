@@ -87,6 +87,17 @@ export async function getTrackingView(deps: TrackingDeps, raw: unknown, caller: 
   }
 
   const deliveryStatus = delivery?.status ?? null;
+  // Hub-aware wording; positions are never given for hubs or linehaul vehicles.
+  const hubLabel =
+    delivery?.status === 'at_origin_hub' && delivery.originHub
+      ? `At our ${delivery.originHub.city} hub`
+      : delivery?.status === 'in_transit' && delivery.destinationHub
+        ? `In transit to ${delivery.destinationHub.city}`
+        : delivery?.status === 'at_destination_hub' && delivery.destinationHub
+          ? `At our ${delivery.destinationHub.city} hub — preparing for delivery`
+          : delivery?.status === 'picked_up' && delivery.originHub
+            ? `Collected — on the way to our ${delivery.originHub.city} hub`
+            : null;
   const view: TrackingView = {
     trackingNumber: booking.trackingNumber,
     access: access ? 'full' : 'public',
@@ -94,7 +105,9 @@ export async function getTrackingView(deps: TrackingDeps, raw: unknown, caller: 
     paymentStatus: booking.paymentStatus,
     deliveryStatus,
     statusLabel:
-      booking.status === 'cancelled' ? BOOKING_STATUS_LABEL.cancelled : deliveryStatus ? PUBLIC_STATUS_LABELS[deliveryStatus] : BOOKING_STATUS_LABEL[booking.status],
+      booking.status === 'cancelled'
+        ? BOOKING_STATUS_LABEL.cancelled
+        : (hubLabel ?? (deliveryStatus ? PUBLIC_STATUS_LABELS[deliveryStatus] : BOOKING_STATUS_LABEL[booking.status])),
     deliveryType: booking.deliveryType,
     urgency: booking.urgency,
     origin: { city: booking.pickup.city, region: booking.pickup.region },
@@ -103,6 +116,13 @@ export async function getTrackingView(deps: TrackingDeps, raw: unknown, caller: 
     timeline,
     liveLocation: delivery ? await liveLocation(deps, delivery, Boolean(access), now) : null,
     delayed: Boolean(delivery?.delayed),
+    network: delivery?.originHub
+      ? {
+          originHub: { name: delivery.originHub.name, city: delivery.originHub.city },
+          destinationHub: delivery.destinationHub ? { name: delivery.destinationHub.name, city: delivery.destinationHub.city } : null,
+          expectedArrivalAtHub: delivery.status === 'in_transit' ? (delivery.linehaul?.expectedArrivalAt ?? null) : null,
+        }
+      : null,
     expectedDeliveryAt: delivery?.expectedDeliveryAt ?? null,
     mapPoints: access
       ? { pickup: booking.pickup.location, destination: booking.destination.location }

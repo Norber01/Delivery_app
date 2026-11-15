@@ -61,6 +61,12 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Linehaul manifests: ops/hub staff (MFA); the assigned linehaul driver sees their own.
+    match /manifests/{id} {
+      allow read: if isOps() || (isDriver() && resource.data.driverUid == request.auth.uid);
+      allow write: if false;
+    }
+
     match /vehicles/{id} {
       allow read: if isDriver() || isOps() || staffIn(['fleet_manager']);
       allow write: if false;

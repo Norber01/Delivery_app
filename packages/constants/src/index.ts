@@ -114,6 +114,7 @@ export const EXCEPTION_REASONS = [
   'weather',
   'vehicle_breakdown',
   'package_not_ready',
+  'missing_in_transit',
   'other',
 ] as const;
 export type ExceptionReason = (typeof EXCEPTION_REASONS)[number];
@@ -151,6 +152,23 @@ export const TRACKING_DEFAULTS = {
   maxShiftHours: 12,
   etaRefreshSeconds: 300,
 } as const;
+
+export const HUB_TYPES = ['hub', 'warehouse', 'drop_point'] as const;
+export type HubType = (typeof HUB_TYPES)[number];
+
+/**
+ * Linehaul manifest lifecycle: open (loading) → sealed (no more changes) → departed (on the
+ * vehicle) → arrived (at destination hub, unloading) → closed (all parcels accounted for).
+ */
+export const MANIFEST_STATUSES = ['open', 'sealed', 'departed', 'arrived', 'closed'] as const;
+export type ManifestStatus = (typeof MANIFEST_STATUSES)[number];
+
+/** Max parcels per manifest (keeps a departure inside one Firestore transaction). */
+export const MAX_MANIFEST_PARCELS = 150;
+
+/** Hub scan operations performed by hub operators (USB/Bluetooth scanners type into a field). */
+export const HUB_SCAN_TYPES = ['receive', 'handover'] as const;
+export type HubScanType = (typeof HUB_SCAN_TYPES)[number];
 
 /** POD OTP rules. */
 export const POD_OTP = { digits: 6, maxAttempts: 5, ttlHours: 48 } as const;
@@ -286,5 +304,12 @@ export const ERROR_CODES = [
   'EVIDENCE_REQUIRED',
   'PHASE_NOT_AVAILABLE',
   'UPLOAD_NOT_FOUND',
+  'WRONG_HUB',
+  'HUB_NOT_CONFIGURED',
+  'MANIFEST_NOT_OPEN',
+  'MANIFEST_CAPACITY',
+  'ALREADY_ON_MANIFEST',
+  'ROUTE_MISMATCH',
+  'NOT_FOUND',
 ] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number];
