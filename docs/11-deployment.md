@@ -13,7 +13,9 @@ pnpm install
 pnpm test                      # unit tests: shared packages, functions services, worker, web
 pnpm test:rules                # Firestore + RTDB security rules against the emulators
 pnpm --filter @courier/functions test:integration   # FirestoreStore + services against the Firestore emulator
-# Browser E2E (Phases 1–2): see the header of functions/test-integration/e2e-browser.cjs
+# Browser E2E: Phases 1–2 functions/test-integration/e2e-browser.cjs, Phase 3 e2e-phase3.cjs (see their headers)
+pnpm --filter @courier/admin-tools dev    # ops app on http://localhost:5174
+pnpm --filter @courier/driver-app test    # driver-app core logic (the app itself needs an Android device/emulator)
 
 # Run the stack
 firebase emulators:start --project demo-courier --only auth,firestore,database,functions
@@ -42,6 +44,8 @@ pnpm dev:web                   # http://localhost:5173
    Non-secret parameters are prompted on first deploy (or set in `functions/.env.<project-id>`):
    `PUBLIC_SITE_URL`, `COMPANY_NAME`, `PAYMENT_FALLBACK_EMAIL_DOMAIN`, `SMS_SENDER_ID`.
    While the SMS secrets are `unset`, notifications are recorded with status `skipped` (nothing is sent).
+   **Note:** delivery codes for proof of delivery are sent by SMS, so SMS must be configured before drivers deliver.
+   Phase 3 adds `firebase functions:secrets:set UPLOAD_SIGNING_SECRET` (32+ random bytes; the same value is set on the Worker) and the `EDGE_WORKER_URL` parameter.
    **Paystack:** set the dashboard webhook URL to the deployed `paystackWebhook` function URL.
    **Auth:** enable Email/Password (with email verification) and Phone providers; add the site domain to authorised domains.
 5. **TTL policies** (cost control and data retention):
@@ -86,12 +90,30 @@ wrangler deploy --env production
 
 **Release order:** rules & indexes → functions → worker → web. Rules must ship before any client relying on them. Promote staging → production only after the phase gate (docs/09) passes in staging.
 
-## 11.5 Cloudflare
+## 11.5 Operations app, driver app and evidence storage (Phase 3)
+
+**Ops app (`apps/admin-tools`)** — a second Cloudflare Pages project (build `pnpm --filter @courier/admin-tools build`, output `apps/admin-tools/dist`) on its own hostname (e.g. `ops.example.com.gh`), protected by **Cloudflare Access** with the company identity provider. Env vars as in `apps/admin-tools/.env.example` (include `VITE_FIREBASE_DATABASE_URL`). Update the CSP `img-src`/`connect-src` in `public/_headers` with the real Worker hostname. Staff must enrol a second factor on first sign-in (Identity Platform MFA: enable SMS and TOTP).
+
+**Staff and drivers** — staff roles are granted with `setUserRole` (or `bootstrap-admin` for the first super admin). Drivers and vehicles are created in the ops app's Fleet page; the driver receives a one-time set-password link (staff never handle passwords).
+
+**Evidence storage (R2)** — create the private buckets named in `workers/api-edge/wrangler.toml` (`courier-evidence-staging`, `courier-evidence`), add a lifecycle rule deleting objects after 24 months, then `wrangler secret put UPLOAD_SIGNING_SECRET --env production`.
+
+**Driver app (`apps/driver-app`)** — Expo dev-client app (native modules: React Native Firebase App Check, background location):
+1. Register the Android app (`gh.example.courier.driver` — change in `app.json`) in Firebase; download `google-services.json` into `apps/driver-app/` (git-ignored).
+2. App Check: enable Play Integrity for the app; for development builds register the debug token printed in logcat.
+3. Copy `.env.example` to `.env` with the Firebase web config and `EXPO_PUBLIC_FIREBASE_DATABASE_URL`.
+4. `pnpm --filter @courier/driver-app build:android` (EAS Build, internal APK) or `npx expo run:android` with a local Android SDK.
+5. On first launch drivers must allow location **all the time**; the app runs a foreground service (persistent notification) only while on shift.
+6. Field-test on the cheapest phones in the fleet before rollout: background GPS on weak networks, battery drain over a full shift, camera scanning of printed labels.
+
+**Labels** — senders print the QR label from the booking confirmation or tracking page (`/label/<tracking number>`); drivers can type the tracking number if a label is missing or damaged.
+
+## 11.6 Cloudflare
 - DNS for the apex and `www` → Pages; `api` → Worker route; `ops` → admin-tools Pages project behind **Cloudflare Access**.
 - WAF managed rules on; rate-limiting rule for `/geocode` (defence in depth alongside the Worker's own limiter).
 - Restrict the Mapbox server token to the Geocoding/Directions scopes; rotate quarterly.
 
-## 11.6 Rollback
+## 11.7 Rollback
 - Functions: redeploy the previous git tag (`git checkout vX && firebase deploy --only functions`).
 - Rules: redeploy the previous rules file from git.
 - Pricing: publish the previous rule set as a new version (bookings keep their snapshot regardless).

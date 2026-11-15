@@ -36,11 +36,24 @@ Each phase ends with a **gate**: all automated tests green, rules tests green, m
 - Not yet exercised: real Paystack test-mode keys and dashboard webhooks, real SMS delivery (Hubtel sender ID approval), phone-OTP sign-in in a real browser (needs reCAPTCHA on a real domain).
 - Not in Phase 2: Hubtel payments adapter, finance/support staff UI, email receipts, support tickets (come with the ops app).
 
-## Phase 3 — Driver app, dispatch, intra-city maps
-- Driver app: login (device-bound), shift start/end, assignments, navigation hand-off, QR scanning, pickup confirmation, GPS foreground service, status updates, failed delivery reporting, POD (OTP/signature/photo), history, offline queue.
-- Dispatch board: intake queue, assignment, live map (Mapbox GL JS) of authorised drivers, exceptions, delayed deliveries.
-- `getTrackingView` with live-location authorization rules.
-- **Gate:** state-machine enforcement tests, assignment authorisation tests, RTDB rules tests, GPS field test on low-end Android devices and weak network, POD OTP tests.
+## Phase 3 — Driver app, dispatch, intra-city maps  ✅ implemented (driver app not yet run on a device)
+- Deliveries created from confirmed bookings; dispatcher actions (assign, unassign, reschedule, reattempt, return to sender, cancel, hold, release) with shift, area and vehicle-size checks.
+- Driver actions, idempotent per `actionId`: start, scan-verified pickup with cash collection, OTP proof of delivery (5-attempt lock), signature + photo fallback, failed pickup/delivery reporting, return to sender.
+- Shifts reserving a vehicle and authorising GPS; live tracking with freshness and ETA; delayed-delivery flagging.
+- POD photos in private R2 via HMAC-signed Worker URLs.
+- Ops app: staff MFA (SMS or authenticator) sign-in and enrolment, live dispatch board and map, POD review, fleet (drivers via set-password links, vehicles).
+- Driver app (Expo/React Native, Android-first): shifts, background GPS, offline action queue with photo uploads, label scanning, delivery code / signature / photo capture, problem reports, history.
+- Web: live driver map on tracking, delay notice, printable QR shipping labels.
+- **Gate tests:** state-machine enforcement, assignment authorisation, RTDB rules, POD OTP, replayed actions, races (double assignment, shared vehicle), live-location custody rules.
+
+**Phase 3 status (honest summary):**
+- Unit tests: 91 functions tests (25 for operations), shared tracking policy and upload tokens, Worker evidence storage, dispatch ranking, driver-app core (offline queue, location reporter, signatures).
+- Emulator integration tests (Firestore + RTDB): end-to-end delivery with RTDB shift authorisation; exactly one winner when two dispatchers assign the same delivery or two drivers take the same vehicle; concurrent replays applied once; wrong codes counted; shift end blocked while holding a package.
+- Rules tests: driver read scope, no direct writes to deliveries/assignments/vehicles, POD and codes server-side/staff-only, timeline readable by ops only.
+- Browser E2E (`functions/test-integration/e2e-phase3.cjs`): booking → QR label → staff without MFA forced to enrol → admin SMS-MFA sign-in → vehicle + driver creation → driver sets password from link → shift → dispatch assignment from the board (map, ranked driver) → wrong label rejected → cash pickup → public live tracking without personal data → wrong code then correct code → POD visible to ops → customer sees Delivered with no live location.
+- Driver app: TypeScript-checked and its Android JavaScript bundle builds (Metro, 837 modules). **It has not been installed or run on an Android device**, so background GPS behaviour, camera scanning, App Check (Play Integrity) and battery use still need a field test on low-end devices and weak networks (the original gate).
+- Not exercised against real services: Mapbox tiles/Directions, Hubtel SMS delivery of codes, R2 (Worker tested with a fake bucket).
+- Deferred: intercity legs and hub custody (Phase 4 — dispatch refuses them explicitly), push notifications to drivers (FCM), dispatcher service-area scoping UI (claim supported server-side), finance UI for cash reconciliation.
 
 ## Phase 4 — Hubs, vehicles, manifests, intercity
 - Hub scanning (in/out), manifests (create, seal, depart, arrive), intercity route schedules, vehicle capacity checks, multi-leg tracking view.

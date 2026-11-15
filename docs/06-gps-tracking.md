@@ -41,4 +41,18 @@ ETA is shown only when the location is Live and the Directions-based estimate ex
 - Positions older than the shift are not retained in RTDB; Firestore keeps only status checkpoints (12-month coordinate retention).
 
 ## 6.7 Map provider abstraction
-`MapProvider` interface (`geocode`, `reverseGeocode`, `route`) lives in `packages/shared-utils/src/geo`. The Mapbox implementation is used by Functions and the edge Worker. The web map component wraps Mapbox GL JS behind a small `MapView` component so the rendering library can be replaced. Directions results are cached per leg in `deliveryRoutes`.
+`MapProvider` interface (`geocode`, `route`) lives in `packages/shared-utils/src/geo`. The Mapbox implementation is used by Functions and the edge Worker. Map display goes through `MapView` in `packages/map-ui` (Mapbox GL JS, lazy-loaded, with a tile-free schematic fallback), so the rendering library can be replaced. ETAs are cached on the delivery for 5 minutes; a per-leg route cache (`deliveryRoutes`) is planned with route optimisation (Phase 6).
+
+## 6.8 Implementation status (Phase 3)
+
+| Item | Where | Status |
+|---|---|---|
+| Send policy (interval, 100 m early send, stationary back-off, accuracy filter) | `packages/shared-utils/src/tracking` | Implemented, unit-tested |
+| Shift authorisation (`/shifts/{uid}`), writes rejected without an active shift | `startShift`/`endShift`, `firebase/database.rules.json` | Implemented; rules tested; verified in the browser E2E (401 before shift, 200 during) |
+| Android foreground-service location task, REST writes with App Check | `apps/driver-app/src/services/location.ts` | Implemented and bundled; **not yet run on a device** |
+| Offline: newest point only, retried on next fix | `apps/driver-app/src/core/locationReporter.ts` | Implemented, unit-tested |
+| Freshness (live / delayed / stale) | shared `locationFreshness`; tracking page and dispatch board | Implemented, tested |
+| Customer location only while the driver holds the package | `getTrackingView` | Implemented, unit + integration + E2E tested |
+| ETA via Directions, cached 5 min, only when live and out for delivery | `getTrackingView` | Implemented, unit-tested with a fake provider; live Mapbox not exercised |
+| Dispatch map of all drivers on shift | `apps/admin-tools` (RTDB listener, MFA staff only) | Implemented, E2E tested with the schematic map |
+| Mapbox GL rendering | `packages/map-ui` | Implemented (lazy-loaded); needs a public token to verify against real tiles |

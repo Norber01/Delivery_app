@@ -13,7 +13,23 @@ import { createHmac } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
+import { getDatabase } from 'firebase-admin/database';
 import { getFirestore } from 'firebase-admin/firestore';
+import { FirestoreOpsStore, RtdbLive } from '../src/ops/firestoreOps.js';
+import {
+  createDriverAccount,
+  dispatchAction,
+  driverAction,
+  endShift,
+  ensureDeliveryForBooking,
+  getEvidenceUrl,
+  requestUpload,
+  startShift,
+  upsertVehicle,
+  type OpsDeps,
+} from '../src/ops/opsService.js';
+import { fromDoc } from '../src/store/firestoreStore.js';
+import type { BookingRecord } from '../src/store/types.js';
 import { callerFromToken, GUEST } from '../src/lib/auth.js';
 import { toHttpsError } from '../src/lib/errors.js';
 import { randomId } from '../src/lib/hash.js';
@@ -30,7 +46,7 @@ const SECRET = 'sk_test_e2e';
 const SITE = process.env.SITE_URL ?? 'http://127.0.0.1:4173';
 const PAYSTACK = 'http://127.0.0.1:7070';
 
-const app = initializeApp({ projectId: 'demo-courier' });
+const app = initializeApp({ projectId: 'demo-courier', databaseURL: 'http://127.0.0.1:9000?ns=demo-courier' });
 const db = getFirestore(app);
 db.settings({ ignoreUndefinedProperties: true });
 const auth = getAuth(app);
@@ -39,6 +55,25 @@ const rateLimiter = new FirestoreRateLimiter(db);
 const site = { publicUrl: SITE, companyName: 'Example Courier GH', fallbackEmailDomain: 'pay.example.test' };
 const pay: PaymentDeps = { store, rateLimiter, provider: new PaystackProvider(SECRET, PAYSTACK), now: () => new Date(), site };
 const quoteDeps = { store, rateLimiter, maps: null, now: () => new Date(), newId: () => randomId() };
+const opsStore = new FirestoreOpsStore(db);
+const live = new RtdbLive(getDatabase(app));
+const opsDeps: OpsDeps = {
+  ops: opsStore,
+  live,
+  evidence: { exists: async () => false }, // POD photos (R2) are covered by unit tests
+  now: () => new Date(),
+  newId: () => randomId(12),
+  newOtp: () => String(Math.floor(Math.random() * 1e6)).padStart(6, '0'),
+  site,
+  uploads: { workerUrl: 'http://127.0.0.1:8788', secret: 'e2e-upload-secret' },
+};
+// Mirrors the deployed onBookingWritten trigger.
+db.collection('deliveryRequests').onSnapshot((snap) => {
+  for (const ch of snap.docChanges()) {
+    if (ch.type !== 'removed') void ensureDeliveryForBooking({ ops: opsStore, now: () => new Date() }, fromDoc<BookingRecord>(ch.doc.data())).catch((e) => console.error('ensureDelivery', e));
+  }
+});
+
 const identity: IdentityPort = {
   async getUser(uid) {
     const u = await auth.getUser(uid);
@@ -74,7 +109,27 @@ createServer(async (req, res) => {
     const handlers: Record<string, () => Promise<unknown>> = {
       getQuote: () => getQuote(quoteDeps, data, caller, meta),
       createBooking: () => createBooking({ store, rateLimiter, now: () => new Date(), site }, data, caller, meta),
-      getTrackingView: () => getTrackingView({ store, rateLimiter }, data, caller, meta),
+      getTrackingView: () => getTrackingView({ store, rateLimiter, ops: opsStore, live, maps: null }, data, caller, meta),
+      dispatchAction: () => dispatchAction(opsDeps, caller, data),
+      driverAction: () => driverAction(opsDeps, caller, data),
+      startShift: () => startShift(opsDeps, caller, data),
+      endShift: () => endShift(opsDeps, caller),
+      requestUpload: () => requestUpload(opsDeps, caller, data),
+      getEvidenceUrl: () => getEvidenceUrl(opsDeps, caller, data),
+      upsertVehicle: () => upsertVehicle({ ops: opsStore }, caller, data),
+      createDriverAccount: () =>
+        createDriverAccount(
+          { ops: opsStore },
+          {
+            async createDriverUser(p) {
+              const u = await auth.createUser({ email: p.email, phoneNumber: p.phone, displayName: p.name });
+              return { uid: u.uid, setupLink: await auth.generatePasswordResetLink(p.email) };
+            },
+            setDriverClaims: (uid) => auth.setCustomUserClaims(uid, { role: 'driver' }),
+          },
+          caller,
+          data,
+        ),
       initiatePayment: () => initiatePayment(pay, data, caller, meta),
       getPaymentStatus: () => getPaymentStatus(pay, data, caller, meta),
       completeSignUp: () => completeSignUp({ store, identity }, caller, data),

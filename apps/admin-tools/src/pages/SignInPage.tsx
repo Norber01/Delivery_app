@@ -63,12 +63,13 @@ export function SignInPage() {
       } catch (err) {
         if ((err as { code?: string }).code !== 'auth/multi-factor-auth-required') throw err;
         const r = getMultiFactorResolver(auth, err as MultiFactorError);
-        setResolver(r);
         const h = r.hints[0];
+        // Send the SMS before showing the code prompt, so a code can never be submitted early.
         if (h?.factorId === PhoneMultiFactorGenerator.FACTOR_ID) {
           const id = await new PhoneAuthProvider(auth).verifyPhoneNumber({ multiFactorHint: h, session: r.session }, recaptcha());
           setSmsVerificationId(id);
         }
+        setResolver(r);
       }
     });
   }
@@ -104,7 +105,10 @@ export function SignInPage() {
               : `Enter the code we sent to ${(hint as { phoneNumber?: string })?.phoneNumber ?? 'your phone'}.`}
           </p>
           <Input label="Verification code" value={code} onChange={setCode} autoComplete="one-time-code" inputMode="numeric" />
-          <button className="btn-primary w-full" disabled={busy || code.trim().length < 6}>
+          <button
+            className="btn-primary w-full"
+            disabled={busy || code.trim().length < 6 || (hint?.factorId === PhoneMultiFactorGenerator.FACTOR_ID && !smsVerificationId)}
+          >
             Verify
           </button>
         </form>

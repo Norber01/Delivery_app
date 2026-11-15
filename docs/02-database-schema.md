@@ -87,14 +87,22 @@ Short-lived (TTL 30 min). `input` (validated `QuoteRequest`), `result` (`PriceQu
 | guestAccessHash | SHA-256 of the guest access token (guests view their booking with tracking number + token) |
 | deliveryId? | set when operations converts the request into a delivery |
 
-### `deliveries/{id}` — W: S
-`requestId`, `trackingNumber`, `status: DeliveryStatus` (state machine in `05-delivery-lifecycle.md`), `currentLegId`, `legIds[]`, `currentCustodian: { type: 'driver' | 'hub' | 'vehicle', id }`, `expectedDeliveryAt?`, `exceptions[]`, `serviceAreaId`.
+### `deliveries/{trackingNumber}` — W: S
+Created by the `onBookingWritten` trigger when a booking becomes `confirmed` (doc ID = tracking number, so creation is idempotent). Carries everything drivers and dispatch need, so neither reads the booking: `status: DeliveryStatus`, `heldFrom`, `holdReason`, `deliveryType`, `urgency`, `serviceAreaId`, `requiredVehicleClass`, `sender`, `recipient`, `pickup`, `destination`, `packages`, `specialHandling`, `instructions`, `paymentPreference`, `collectOnPickupPesewas` (cash still to collect), `legs[]` (below), `currentLegId`, `currentAssignmentId`, `currentDriverUid`, `driverUids[]` (every driver who held it: read access + history), `custodian: { type: 'none' | 'driver' | 'hub' | 'vehicle', id? }`, `exceptions[]` (last 20), `openException`, `expectedDeliveryAt` (from `DELIVERY_WINDOWS_HOURS`), `delayed`, `attempts`, `eta { minutes, computedAt }`.
 
-### `deliveries/{id}/shipmentLegs/{legId}` — W: S
-`sequence`, `type: first_mile | linehaul | last_mile | direct`, `from: { type: 'address' | 'hub', hubId?, address? }`, `to`, `status: planned | assigned | in_progress | completed | failed | cancelled`, `assignmentId?`, `manifestId?`, `vehicleId?`, `driverUid?`, `startedAt?`, `completedAt?`.
+**Legs are embedded** (`legs[]`: `id`, `sequence`, `type: direct | first_mile | linehaul | last_mile`, `status: planned | assigned | in_progress | completed | failed | cancelled`, `assignmentId`, `driverUid`, `vehicleId`) rather than a subcollection: a delivery has at most three, they are always read with the delivery, and custody changes must update leg and delivery atomically.
 
 ### `assignments/{id}` — W: S
-`deliveryId`, `legId`, `driverUid`, `vehicleId`, `assignedBy`, `status: offered | accepted | started | completed | cancelled`, `trackingAuthorizedUntil` (drives GPS authorization).
+`deliveryId`, `legId`, `driverUid`, `vehicleId`, `assignedBy`, `status: assigned | started | completed | failed | cancelled`, `createdAt`, `startedAt`, `endedAt`. Company drivers are assigned (no offer/accept step).
+
+### `driverActions/{actionId}` — W: S
+Idempotency record for each driver-app action (`driverUid`, `deliveryId`, `type`, resulting `status`, `errorCode`). A replay of the same `actionId` returns the stored result instead of acting twice — this is what makes the offline queue safe.
+
+### `podSecrets/{deliveryId}` — W: S, never client-readable
+`otpHash` (SHA-256 of `deliveryId:code`), `attempts`, `locked` (after 5 wrong codes), `expiresAt` (48 h). Deleted on delivery.
+
+### `uploads/{key}` — W: S
+Upload tickets for POD photos (`deliveryId`, `driverUid`, `contentType`, `maxBytes`, `expiresAt`). A photo key is accepted on a POD only if its ticket belongs to the same driver and delivery and the object exists in R2.
 
 ### `manifests/{id}` — W: S (Phase 4)
 `routeId`, `vehicleId`, `driverUids[]`, `departureAt`, `status: open | sealed | departed | arrived | closed`, `deliveryIds[]`, `sealedBy`, `scanCounts`.
@@ -105,8 +113,14 @@ Short-lived (TTL 30 min). `input` (validated `QuoteRequest`), `result` (`PriceQu
 ### `deliveryRoutes/{deliveryId_legId}` — W: S
 Cached Directions result per leg: `polyline` (encoded), `distanceKm`, `durationMinutes`, `provider`, `computedAt`. Prevents repeat Directions calls.
 
-### `proofOfDelivery/{deliveryId}` — W: S
-`method: otp | signature | photo | otp_and_photo`, `otpVerified`, `signatureR2Key?`, `photoR2Keys[]`, `receivedByName`, `location`, `capturedAt`, `driverUid`. OTP secrets live in a separate server-only `podSecrets/{deliveryId}` doc storing only a hash and attempt counter.
+### `proofOfDelivery/{deliveryId}` (and `{deliveryId}_return`) — W: S
+`kind: delivery | return`, `method: otp | signature`, `otpVerified`, `receivedByName`, `signature` (vector strokes normalised to 0..1, ≤ 60 strokes / 3000 points — small enough to store inline), `photoKeys[]` (R2 keys `pod/{deliveryId}/{random}.jpg`), `location`, `distanceFromDestinationM`, `flaggedFarFromDestination` (> 300 m), `driverUid`, `capturedAt`. Readable by dispatch/finance/admin only.
+
+### `drivers/{uid}` (Phase 3 fields)
+`name`, `phone`, `email`, `employeeNumber`, `homeServiceAreaId`, `status: active | suspended`, `currentShift: { id, vehicleId, vehicleClass, serviceAreaId, startedAt, activeUntil } | null`.
+
+### `vehicles/{id}` (Phase 3 fields)
+`registrationNumber`, `vehicleClass`, `capacityKg`, `homeServiceAreaId`, `status: available | in_use | maintenance | retired`, `currentDriverUid`.
 
 ## 2.5 Money
 
@@ -136,13 +150,13 @@ Invoices: `businessId`, `period`, `lines[]` (deliveryIds), `totalPesewas`, `stat
 /driverLocations/{driverUid}
     lat, lng, accuracyM, speedKph, heading, recordedAt (client ms), serverAt (server ms),
     shiftId, vehicleId
-/activeTracking/{deliveryId}
-    driverUid, legId, authorizedUntil   (written by server only)
+/shifts/{driverUid}
+    shiftId, activeUntil (ms)     (written by startShift/endShift only)
 ```
 
 - A driver can write only `/driverLocations/{auth.uid}` and only while `auth.token.role == 'driver'` and they have an active shift flag (`/shifts/{uid}/activeUntil > now`, server-written).
 - Dispatch/ops roles can read all of `/driverLocations`.
-- Customers never read RTDB directly. The customer tracking page calls `getTrackingView`, which returns the driver location **only** if `/activeTracking/{deliveryId}` exists, the authorization has not expired, and the current leg's custodian is that driver.
+- Customers never read RTDB directly. `getTrackingView` returns the driver location **only** if the delivery is `out_for_delivery` with that driver as custodian (or `en_route_to_pickup` for the sender's full view), the driver's shift is still active, and the stored point carries that shift's id. Positions for hubs, linehaul vehicles or another driver are never shown.
 - Firestore keeps *checkpoints* (one `trackingEvents` location record per status change, not every GPS ping) for history.
 
 ## 2.8 Relationships

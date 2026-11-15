@@ -15,4 +15,4 @@
 | 11 | [Setup & deployment](11-deployment.md) | Local development, project setup, deployment, rollback |
 | 12 | [Cost control](12-cost-control.md) | Free tiers, usage controls, budget alerts |
 
-Screenshots of the booking, payment, tracking and account flows (Phases 1–2) are in [`screenshots/`](screenshots/).
+Screenshots of the booking, payment, tracking, account, dispatch, fleet and proof-of-delivery flows (Phases 1–3) are in [`screenshots/`](screenshots/).

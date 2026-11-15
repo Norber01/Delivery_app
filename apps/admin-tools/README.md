@@ -1,8 +1,17 @@
-# Ops & admin tools (Phase 2+ — not started)
+# Ops app
 
-Internal React + TypeScript + Tailwind app deployed to a separate hostname behind Cloudflare Access.
-Planned areas: dispatch board and live map (Phase 3), hubs and manifests (Phase 4), pricing editor,
-payments/refunds and finance reports (Phase 2+), fleet and maintenance (Phase 6).
+Internal React + Vite app for staff, deployed to a separate hostname behind Cloudflare Access.
+Staff sign in with email + password **and a second factor** (SMS or authenticator app); accounts
+without one are taken to enrolment first. The backend independently requires MFA for every staff action.
 
-Until it exists, pricing is published with `pnpm --filter @courier/functions seed` (validated and
-audited exactly like the `publishPricingRules` function) and roles via `setUserRole`/`bootstrap-admin`.
+- **Dispatch** (`dispatcher`, `admin`, `super_admin`): live board (needs driver / in progress /
+  exceptions, delayed filter), map of drivers on shift, ranked driver choice, all dispatch actions,
+  timeline with internal notes, proof of delivery (signature, photo via short-lived URL).
+- **Fleet** (`fleet_manager`, `admin`, `super_admin`): drivers (created with a set-password link) and vehicles.
+
+Finance, hub and analytics screens arrive in later phases.
+
+```bash
+pnpm --filter @courier/admin-tools dev   # http://localhost:5174 (see .env.example)
+pnpm --filter @courier/admin-tools test
+```
