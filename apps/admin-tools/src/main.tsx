@@ -1,0 +1,77 @@
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+import { createBrowserRouter, Navigate, NavLink, Outlet, RouterProvider } from 'react-router';
+import './index.css';
+import { AuthProvider, canDispatch, canManageFleet, useStaffAuth } from './lib/auth';
+import { config } from './lib/config';
+import { DispatchPage } from './pages/DispatchPage';
+import { FleetPage } from './pages/FleetPage';
+import { Centered, EnrollMfaPage, SignInPage } from './pages/SignInPage';
+
+/** Gate: signed in → staff role → second factor used this session. */
+function Shell() {
+  const { user, role, isStaff, mfa, loading, signOut } = useStaffAuth();
+  if (loading) return <p className="p-8 text-center text-slate-500">Loading…</p>;
+  if (!user) return <SignInPage />;
+  if (!isStaff)
+    return (
+      <Centered title="No operations access">
+        <p className="text-sm text-slate-600">This account is not set up for operations. Ask an administrator.</p>
+        <button className="btn-secondary" onClick={() => signOut()}>
+          Sign out
+        </button>
+      </Centered>
+    );
+  if (!mfa) return <EnrollMfaPage />;
+  const link = ({ isActive }: { isActive: boolean }) => `rounded px-3 py-1.5 text-sm font-medium ${isActive ? 'bg-brand-50 text-brand-700' : 'text-slate-600 hover:text-slate-900'}`;
+  return (
+    <div className="min-h-screen">
+      <header className="flex items-center gap-4 border-b border-slate-200 bg-white px-4 py-2">
+        <span className="font-bold text-brand-700">{config.companyName} · Ops</span>
+        <nav className="flex gap-1">
+          {canDispatch(role) && <NavLink to="/dispatch" className={link}>Dispatch</NavLink>}
+          {canManageFleet(role) && <NavLink to="/fleet" className={link}>Fleet</NavLink>}
+        </nav>
+        <span className="ml-auto text-sm text-slate-500">
+          {user.email} · {role}
+        </span>
+        <button className="btn-secondary py-1" onClick={() => signOut()}>
+          Sign out
+        </button>
+      </header>
+      <Outlet />
+    </div>
+  );
+}
+
+function Home() {
+  const { role } = useStaffAuth();
+  if (canDispatch(role)) return <Navigate to="/dispatch" replace />;
+  if (canManageFleet(role)) return <Navigate to="/fleet" replace />;
+  return <p className="p-8 text-slate-600">Your role ({role}) has no screens yet. Finance and hub tools arrive in later phases.</p>;
+}
+
+function Guard({ allow, children }: { allow: (r: ReturnType<typeof useStaffAuth>['role']) => boolean; children: React.ReactNode }) {
+  const { role } = useStaffAuth();
+  return allow(role) ? <>{children}</> : <Navigate to="/" replace />;
+}
+
+const router = createBrowserRouter([
+  {
+    element: <Shell />,
+    children: [
+      { path: '/', element: <Home /> },
+      { path: '/dispatch', element: <Guard allow={canDispatch}><DispatchPage /></Guard> },
+      { path: '/fleet', element: <Guard allow={canManageFleet}><FleetPage /></Guard> },
+      { path: '*', element: <Navigate to="/" replace /> },
+    ],
+  },
+]);
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <AuthProvider>
+      <RouterProvider router={router} />
+    </AuthProvider>
+  </StrictMode>,
+);

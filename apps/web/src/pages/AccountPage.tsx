@@ -9,7 +9,7 @@ import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { emptyAddress, type AddressDraft } from '../lib/draft';
 import type { ApiError } from '../lib/errors';
-import { getFirebase } from '../lib/firebase';
+import { getDb } from '../lib/db';
 import { BOOKING_STATUS_LABEL, PAYMENT_STATUS_LABEL } from '../lib/labels';
 
 const DEFAULT_PREFS: NotificationPrefs = { smsBookingUpdates: true, smsPaymentReceipts: true };
@@ -23,7 +23,7 @@ export function AccountPage() {
   const uid = user!.uid;
 
   const loadBookings = async () => {
-    const { db } = getFirebase();
+    const db = getDb();
     const snap = await getDocs(query(collection(db, 'deliveryRequests'), where('customerUid', '==', uid), orderBy('createdAt', 'desc'), limit(50)));
     setBookings(
       snap.docs.map((d) => {
@@ -45,7 +45,7 @@ export function AccountPage() {
 
   useEffect(() => {
     loadBookings().catch(() => setError('Could not load your bookings.'));
-    const { db } = getFirebase();
+    const db = getDb();
     return onSnapshot(doc(db, 'customers', uid), (snap) => {
       setAddresses((snap.get('savedAddresses') as SavedAddress[] | undefined) ?? []);
       setPrefs({ ...DEFAULT_PREFS, ...(snap.get('notificationPrefs') as Partial<NotificationPrefs> | undefined) });
@@ -57,7 +57,7 @@ export function AccountPage() {
   const saveProfile = async (patch: { savedAddresses?: SavedAddress[]; notificationPrefs?: NotificationPrefs }) => {
     try {
       setError(null);
-      await setDoc(doc(getFirebase().db, 'customers', uid), patch, { merge: true });
+      await setDoc(doc(getDb(), 'customers', uid), patch, { merge: true });
       return true;
     } catch {
       setError('Could not save your changes. Please try again.');

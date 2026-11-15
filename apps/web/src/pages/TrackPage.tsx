@@ -1,3 +1,4 @@
+import { MapView, type MapMarker } from '@courier/map-ui';
 import type { TrackingView } from '@courier/shared-types';
 import { formatGhs } from '@courier/shared-utils';
 import { useEffect, useState, type FormEvent } from 'react';
@@ -8,7 +9,47 @@ import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import type { ApiError } from '../lib/errors';
 import { accessFromHash, recallAccess, rememberAccess } from '../lib/guestAccess';
+import { config } from '../lib/config';
 import { DELIVERY_TYPE_LABEL, PAYMENT_PREFERENCE_LABEL, PAYMENT_RECORD_LABEL, PAYMENT_STATUS_LABEL } from '../lib/labels';
+
+/** Statuses in which the page refreshes itself (a driver is moving). */
+const ACTIVE = ['assigned', 'en_route_to_pickup', 'picked_up', 'out_for_delivery'];
+const REFRESH_MS = 30_000;
+
+function minutesAgo(iso: string) {
+  const m = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60_000));
+  return m <= 1 ? 'just now' : `${m} min ago`;
+}
+
+function LiveSection({ view }: { view: TrackingView }) {
+  const loc = view.liveLocation;
+  const markers: MapMarker[] = [];
+  if (view.mapPoints.pickup) markers.push({ id: 'pickup', kind: 'pickup', label: 'Pickup', ...view.mapPoints.pickup });
+  markers.push({ id: 'destination', kind: 'destination', label: view.access === 'full' ? 'Delivery' : `${view.destination.city} area`, ...view.mapPoints.destination });
+  if (loc) markers.push({ id: 'driver', kind: 'driver', label: 'Driver', lat: loc.lat, lng: loc.lng, muted: loc.freshness !== 'live' });
+  const showMap = Boolean(loc) || ACTIVE.includes(view.deliveryStatus ?? '');
+  return (
+    <section className="card space-y-3">
+      {loc ? (
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <p className="font-semibold">
+            {loc.etaMinutes !== null ? `Driver is about ${loc.etaMinutes} min away` : view.deliveryStatus === 'en_route_to_pickup' ? 'Driver is on the way to pickup' : 'Driver is on the way'}
+          </p>
+          <p className={`text-sm ${loc.freshness === 'live' ? 'text-brand-700' : 'text-amber-700'}`}>
+            {loc.freshness === 'live' ? `Live · updated ${minutesAgo(loc.updatedAt)}` : `Location last updated ${minutesAgo(loc.updatedAt)} — the driver may have weak signal`}
+          </p>
+        </div>
+      ) : (
+        <p className="text-sm text-slate-600">
+          {view.deliveryStatus === 'in_transit' || view.deliveryStatus === 'at_origin_hub' || view.deliveryStatus === 'at_destination_hub'
+            ? 'Your package is moving through our hub network.'
+            : 'The driver’s live location appears here while your package is out for delivery.'}
+        </p>
+      )}
+      {showMap && <MapView ariaLabel="Map of your delivery" markers={markers} mapboxToken={config.mapboxPublicToken} height={300} />}
+    </section>
+  );
+}
 
 export function TrackPage() {
   const { tn } = useParams();
@@ -54,18 +95,27 @@ function TrackingResult({ trackingNumber }: { trackingNumber: string }) {
     }
   }, [location.hash, location.pathname, trackingNumber]);
 
+  const [tick, setTick] = useState(0);
   useEffect(() => {
     if (authLoading) return;
     let cancelled = false;
-    setError(null);
+    if (tick === 0) setError(null);
     api
       .getTrackingView({ trackingNumber, accessToken: token })
       .then((v) => !cancelled && setView(v))
-      .catch((e: ApiError) => !cancelled && setError(e.message));
+      .catch((e: ApiError) => !cancelled && tick === 0 && setError(e.message));
     return () => {
       cancelled = true;
     };
-  }, [trackingNumber, token, authLoading, user]);
+  }, [trackingNumber, token, authLoading, user, tick]);
+
+  // Refresh while a driver is active and the page is visible (cost control: no hidden polling).
+  const active = ACTIVE.includes(view?.deliveryStatus ?? '');
+  useEffect(() => {
+    if (!active) return;
+    const t = setInterval(() => document.visibilityState === 'visible' && setTick((n) => n + 1), REFRESH_MS);
+    return () => clearInterval(t);
+  }, [active]);
 
   if (error) return <p className="card text-red-700">{error}</p>;
   if (!view) return <p className="text-slate-500">Loading…</p>;
@@ -80,7 +130,15 @@ function TrackingResult({ trackingNumber }: { trackingNumber: string }) {
           {DELIVERY_TYPE_LABEL[view.deliveryType]} · {view.origin.city} → {view.destination.city}
         </p>
         <p className="text-sm text-slate-500">Payment: {PAYMENT_STATUS_LABEL[view.paymentStatus]}</p>
+        {view.expectedDeliveryAt && !['delivered', 'returned', 'cancelled'].includes(view.deliveryStatus ?? '') && (
+          <p className="text-sm text-slate-500">Expected by {new Date(view.expectedDeliveryAt).toLocaleString('en-GH', { dateStyle: 'medium', timeStyle: 'short' })}</p>
+        )}
+        {view.delayed && (
+          <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">This delivery is running late. Our dispatch team has been alerted.</p>
+        )}
       </div>
+
+      <LiveSection view={view} />
 
       {d?.canPayOnline && (
         <div className="card flex flex-wrap items-center justify-between gap-4 border-amber-200 bg-amber-50">
@@ -105,10 +163,6 @@ function TrackingResult({ trackingNumber }: { trackingNumber: string }) {
         </ol>
       </section>
 
-      <p className="rounded-lg bg-slate-100 px-4 py-3 text-sm text-slate-600">
-        Live driver location appears here once a driver is on the way with your package.
-      </p>
-
       {d ? (
         <>
           <section className="grid gap-4 sm:grid-cols-2">
@@ -130,6 +184,11 @@ function TrackingResult({ trackingNumber }: { trackingNumber: string }) {
               </div>
             ))}
           </section>
+          {['awaiting_assignment', 'assigned', 'en_route_to_pickup', null].includes(view.deliveryStatus) && view.bookingStatus !== 'cancelled' && (
+            <Link to={`/label/${view.trackingNumber}`} className="btn-secondary w-fit">
+              Print package label
+            </Link>
+          )}
           <PriceBreakdown quote={d.price} />
           <section className="card text-sm">
             <h3 className="mb-2 font-semibold">Payment</h3>

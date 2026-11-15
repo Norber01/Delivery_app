@@ -6,15 +6,13 @@ import { ErrorPage } from './pages/ErrorPage';
 import './index.css';
 import { RequireAuth } from './components/RequireAuth';
 import { AuthProvider } from './lib/auth';
-import { AccountPage } from './pages/AccountPage';
-import { BookPage } from './pages/BookPage';
-import { PaymentReturnPage } from './pages/PaymentReturnPage';
-import { ReceiptPage } from './pages/ReceiptPage';
-import { SignInPage } from './pages/SignInPage';
-import { TrackPage } from './pages/TrackPage';
 import { HomePage } from './pages/HomePage';
 import { NotFoundPage } from './pages/NotFoundPage';
-import { TermsPage } from './pages/TermsPage';
+
+/** Route-level code splitting: the home page loads without booking, tracking or account code. */
+const page = (load: () => Promise<{ default: React.ComponentType }>) => async () => ({ Component: (await load()).default });
+const lazyPage = <K extends string>(load: () => Promise<Record<K, React.ComponentType>>, name: K) =>
+  page(async () => ({ default: (await load())[name] }));
 
 const router = createBrowserRouter([
   {
@@ -22,20 +20,26 @@ const router = createBrowserRouter([
     errorElement: <ErrorPage />,
     children: [
       { path: '/', element: <HomePage /> },
-      { path: '/book', element: <BookPage /> },
-      { path: '/terms', element: <TermsPage /> },
-      { path: '/track', element: <TrackPage /> },
-      { path: '/track/:tn', element: <TrackPage /> },
-      { path: '/payment/return', element: <PaymentReturnPage /> },
-      { path: '/receipt/:tn', element: <ReceiptPage /> },
-      { path: '/signin', element: <SignInPage /> },
+      { path: '/book', lazy: lazyPage(() => import('./pages/BookPage'), 'BookPage') },
+      { path: '/terms', lazy: lazyPage(() => import('./pages/TermsPage'), 'TermsPage') },
+      { path: '/track', lazy: lazyPage(() => import('./pages/TrackPage'), 'TrackPage') },
+      { path: '/track/:tn', lazy: lazyPage(() => import('./pages/TrackPage'), 'TrackPage') },
+      { path: '/payment/return', lazy: lazyPage(() => import('./pages/PaymentReturnPage'), 'PaymentReturnPage') },
+      { path: '/receipt/:tn', lazy: lazyPage(() => import('./pages/ReceiptPage'), 'ReceiptPage') },
+      { path: '/label/:tn', lazy: lazyPage(() => import('./pages/LabelPage'), 'LabelPage') },
+      { path: '/signin', lazy: lazyPage(() => import('./pages/SignInPage'), 'SignInPage') },
       {
         path: '/account',
-        element: (
-          <RequireAuth>
-            <AccountPage />
-          </RequireAuth>
-        ),
+        lazy: page(async () => {
+          const { AccountPage } = await import('./pages/AccountPage');
+          return {
+            default: () => (
+              <RequireAuth>
+                <AccountPage />
+              </RequireAuth>
+            ),
+          };
+        }),
       },
       { path: '*', element: <NotFoundPage /> },
     ],

@@ -13,7 +13,7 @@
     "@courier/shared-utils": "workspace:*"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20251101.0",
+    "@cloudflare/workers-types": "^5.20261110.1",
     "wrangler": "^4.45.0"
   }
 }

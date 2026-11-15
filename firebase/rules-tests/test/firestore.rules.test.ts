@@ -134,6 +134,8 @@ describe('Phase 2: accounts, payments, tracking', () => {
     await assertSucceeds(getDocs(query(collection(db, 'payments'), where('customerUid', '==', 'alice'))));
     await assertFails(getDoc(doc(db, 'refunds/r1')));
     await assertFails(getDoc(doc(db, 'trackingEvents/e1')));
+    await assertSucceeds(getDoc(doc(as('d', { role: 'dispatcher', ...mfa }), 'trackingEvents/e1')));
+    await assertFails(getDoc(doc(as('k', { role: 'driver' }), 'trackingEvents/e1')));
     await assertFails(getDoc(doc(db, 'notifications/n1')));
     await assertFails(getDoc(doc(db, 'paymentEvents/x')));
     await assertSucceeds(getDoc(doc(as('f', { role: 'finance', ...mfa }), 'refunds/r1')));

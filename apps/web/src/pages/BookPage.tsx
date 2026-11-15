@@ -454,6 +454,9 @@ function BookingConfirmation({ booking }: { booking: CreateBookingResponse }) {
         <Link to={trackLink(booking.trackingNumber, booking.guestAccessToken)} className="btn-secondary">
           Track this booking
         </Link>
+        <Link to={`/label/${booking.trackingNumber}`} className="btn-secondary">
+          Print package label
+        </Link>
         {!user && (
           <Link to="/signin" className="btn-secondary">
             Create an account

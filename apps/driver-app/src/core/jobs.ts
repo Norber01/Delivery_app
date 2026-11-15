@@ -1,0 +1,36 @@
+import type { DeliveryStatus } from '@courier/constants';
+import type { DeliveryDoc } from '@courier/shared-types';
+
+/** What the driver should do next for a job, in plain words. */
+export function nextStep(d: Pick<DeliveryDoc, 'status' | 'collectOnPickupPesewas'>): string {
+  switch (d.status) {
+    case 'assigned':
+      return 'Start the job when you set off to the pickup';
+    case 'en_route_to_pickup':
+      return d.collectOnPickupPesewas > 0 ? 'Collect payment, then scan the package label' : 'Scan the package label at pickup';
+    case 'out_for_delivery':
+      return 'Deliver and enter the recipient’s 6-digit code';
+    case 'delivery_failed':
+      return 'Waiting for dispatch: reattempt or return';
+    case 'returning_to_sender':
+      return 'Return the package to the sender and get a signature';
+    default:
+      return '';
+  }
+}
+
+const ORDER: DeliveryStatus[] = ['out_for_delivery', 'en_route_to_pickup', 'returning_to_sender', 'assigned', 'delivery_failed'];
+
+/** Jobs in working order: packages in hand first, then pickups, then new assignments. */
+export function sortJobs<T extends Pick<DeliveryDoc, 'status' | 'expectedDeliveryAt'>>(jobs: T[]): T[] {
+  return [...jobs].sort((a, b) => ORDER.indexOf(a.status) - ORDER.indexOf(b.status) || a.expectedDeliveryAt.localeCompare(b.expectedDeliveryAt));
+}
+
+/** Navigation hand-off (Google Maps app on Android, browser elsewhere). */
+export function navigationUrl(p: { lat: number; lng: number }, platform: 'android' | 'other'): string {
+  return platform === 'android' ? `google.navigation:q=${p.lat},${p.lng}&mode=d` : `https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}&travelmode=driving`;
+}
+
+export function newActionId(randomBytes: (n: number) => Uint8Array): string {
+  return [...randomBytes(16)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}

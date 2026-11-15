@@ -1,0 +1,39 @@
+{
+  "name": "@courier/driver-app",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.ts",
+  "scripts": {
+    "start": "expo start --dev-client",
+    "android": "expo run:android",
+    "build:android": "eas build --platform android --profile preview",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@courier/constants": "workspace:*",
+    "@courier/shared-types": "workspace:*",
+    "@courier/shared-utils": "workspace:*",
+    "@courier/validation": "workspace:*",
+    "@react-native-async-storage/async-storage": "^2.2.0",
+    "@react-native-firebase/app": "^27.1.1",
+    "@react-native-firebase/app-check": "^27.1.1",
+    "expo": "~58.0.25",
+    "expo-build-properties": "~58.0.0",
+    "expo-camera": "~58.0.14",
+    "expo-crypto": "~58.0.8",
+    "expo-image-manipulator": "~58.0.16",
+    "expo-image-picker": "~58.0.10",
+    "expo-location": "~58.0.22",
+    "expo-status-bar": "~58.0.5",
+    "expo-task-manager": "~58.0.14",
+    "firebase": "^13.2.0",
+    "react": "19.3.0",
+    "react-native": "0.88.1",
+    "react-native-svg": "^15.16.1",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/react": "~19.3.0"
+  }
+}

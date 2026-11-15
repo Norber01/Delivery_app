@@ -66,6 +66,12 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Full timeline incl. internal notes for ops staff; customers get public messages via getTrackingView.
+    match /trackingEvents/{id} {
+      allow read: if isOps();
+      allow write: if false;
+    }
+
     match /proofOfDelivery/{id} {
       allow read: if staffIn(['dispatcher', 'finance', 'admin', 'super_admin']);
       allow write: if false;
