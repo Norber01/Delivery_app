@@ -104,6 +104,10 @@ export async function driverAction(deps: OpsDeps, caller: Caller, raw: unknown):
   if (outcome.kind === 'duplicate') {
     const p = outcome.previous;
     if (p.driverUid !== caller.uid) throw new AppError('PERMISSION_DENIED', 'Invalid action.', 'permission-denied');
+    // A replay must be the same action; an id reused for something else must never report success.
+    if (p.deliveryId !== a.deliveryId || p.type !== a.type) {
+      throw new AppError('VALIDATION_FAILED', 'This action id was already used for a different action. Please retry.', 'invalid-argument');
+    }
     if (p.errorCode) throw new AppError(p.errorCode as never, p.errorMessage ?? 'Action failed.');
     return { actionId: a.actionId, deliveryId: a.deliveryId, status: p.status as DriverActionResponse['status'], duplicate: true };
   }

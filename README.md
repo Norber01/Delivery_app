@@ -10,7 +10,7 @@ Monorepo for a company-operated courier service in Ghana: own vehicles, own driv
 | 1 | Infrastructure, website, booking, pricing | ✅ Implemented & tested (needs real Firebase/Cloudflare/Mapbox projects to go live) |
 | 2 | Payments, customer accounts, tracking | ✅ Implemented & tested (needs Paystack/SMS accounts to go live) |
 | 3 | Driver app, dispatch, intra-city maps | ✅ Implemented & tested in emulators/browsers; driver app needs device field-testing |
-| 4 | Hubs, vehicles, manifests, intercity | Not started |
+| 4 | Hubs, vehicles, manifests, intercity | ✅ Implemented & tested in emulators/browsers (driver-app hub steps need device testing) |
 | 5 | Business accounts, bulk bookings, invoices | Not started |
 | 6 | Route optimisation, analytics, fleet | Not started |
 
@@ -20,7 +20,9 @@ Monorepo for a company-operated courier service in Ghana: own vehicles, own driv
 
 **What works in Phase 3:** confirmed bookings become deliveries; dispatchers (with two-step sign-in) see a live board and map, assign drivers on shift, and handle exceptions; drivers start shifts on a vehicle, share GPS only while on shift, scan labels, collect cash, and complete deliveries with the recipient's SMS code (or signature + photo); customers see the driver's live position only while their package is out for delivery.
 
-**Not yet available:** hubs and intercity manifests (Phase 4), business accounts and bulk bookings (Phase 5), route optimisation and analytics (Phase 6), finance screens.
+**What works in Phase 4:** intercity parcels move pickup driver → origin hub → linehaul manifest → destination hub → last-mile driver, with a scan at every hand-over by hub staff limited to their own hubs; manifests check route, vehicle capacity and that each parcel is on only one; anything not unloaded is flagged missing; customers see "At our Accra hub" / "In transit to Kumasi" with an expected arrival, never a vehicle position.
+
+**Not yet available:** business accounts and bulk bookings (Phase 5), route optimisation and analytics (Phase 6), finance screens, hub drop-off/collection by customers, automated intercity returns.
 
 ## Layout
 

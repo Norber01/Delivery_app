@@ -92,6 +92,7 @@ describe('ActionQueue', () => {
   it('classifies callable errors', () => {
     expect(toActionError({ code: 'functions/failed-precondition', message: 'x', details: { code: 'INVALID_TRANSITION' } }).retryable).toBe(false);
     expect(toActionError({ code: 'functions/unavailable', message: 'x' }).retryable).toBe(true);
+    expect(toActionError({ code: 'functions/failed-precondition', message: 'That code is not correct. [400]', details: { code: 'OTP_INVALID' } }).message).toBe('That code is not correct.');
     expect(toActionError(new TypeError('Network request failed')).retryable).toBe(true);
   });
 });

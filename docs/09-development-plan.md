@@ -55,9 +55,20 @@ Each phase ends with a **gate**: all automated tests green, rules tests green, m
 - Not exercised against real services: Mapbox tiles/Directions, Hubtel SMS delivery of codes, R2 (Worker tested with a fake bucket).
 - Deferred: intercity legs and hub custody (Phase 4 — dispatch refuses them explicitly), push notifications to drivers (FCM), dispatcher service-area scoping UI (claim supported server-side), finance UI for cash reconciliation.
 
-## Phase 4 — Hubs, vehicles, manifests, intercity
-- Hub scanning (in/out), manifests (create, seal, depart, arrive), intercity route schedules, vehicle capacity checks, multi-leg tracking view.
-- **Gate:** custody chain tests (no parcel in two custodies), manifest capacity tests, tracking view never shows driver location when at hub/linehaul.
+## Phase 4 — Hubs, vehicles, manifests, intercity  ✅ implemented
+- Hubs and intercity routes (admin, Network page or seed file); resolved onto intercity deliveries (primary hub per service area).
+- First mile ends at the origin hub (no delivery code); hub operators scan parcels in; manifests are created per route departure, loaded by scan with route/capacity/one-manifest checks, sealed, and departed only when the linehaul driver is on shift with that vehicle; arrival is recorded at the destination hub before unloading scans; closing flags anything not unloaded as missing (cleared when found).
+- Last mile assigned by dispatch in the destination area; the hub hands the parcel to that driver (delivery code issued then); failed last-mile deliveries come back into the hub.
+- Hub operators restricted to their `hubIds`; shift end blocked while a manifest is on the road; customers see hub/in-transit wording and expected hub arrival, never a vehicle or linehaul driver position.
+- **Gate tests:** custody chain (one custodian at every step, wrong-hub refusal), manifest capacity and single-manifest rules, tracking privacy during linehaul.
+
+**Phase 4 status (honest summary):**
+- Unit tests: intercity journey end to end, failed last mile back to hub, manifest capacity/route/duplicate/scope rules, missing-parcel closure and recovery (functions: 98 tests total).
+- Emulator integration: multi-parcel departure/arrival transactions; two manifests loading the same parcel concurrently → exactly one succeeds; shift end blocked during linehaul.
+- Rules: manifests readable by MFA ops/hub staff and their own linehaul driver only; no client writes to manifests or hubs.
+- Browser E2E (`functions/test-integration/e2e-phase4.cjs`) with two hub operators each scoped to their hub, verified twice (clean data and on top of earlier runs).
+- Found and fixed during E2E: SDK status codes ("[400]") leaking into messages; timeline ordering of same-millisecond events; dispatch cards re-ordering under the cursor (now sorted by due time); a reused driver-action id for a different action returned the earlier result as success (now rejected).
+- Not built: customer drop-off at / collection from hubs, intercity return to sender (refused with guidance; handled manually), multi-hop routes (one linehaul per parcel), manifest printing, scheduled-departure reminders. Driver-app hub steps are code-complete but, like Phase 3, **not yet run on a device**.
 
 ## Phase 5 — Business accounts, bulk bookings, invoices
 - Business registration & verification workflow, staff accounts, address book, CSV bulk upload (validated row by row, partial-failure report), contract pricing, credit limits, monthly invoices and reports.

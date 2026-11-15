@@ -398,7 +398,7 @@ export function decideDriverAction(ctx: OpsContext, a: ValidDriverAction, deps: 
         },
         events: toHub
           ? [event(ctx, 'picked_up', `Package collected — on the way to our ${d.originHub?.city ?? ''} hub`.trim(), actor, at)]
-          : [event(ctx, 'picked_up', PUBLIC_STATUS_LABELS.picked_up, actor, at), event(ctx, 'out_for_delivery', PUBLIC_STATUS_LABELS.out_for_delivery, actor, at, 1)],
+          : [event(ctx, 'picked_up', PUBLIC_STATUS_LABELS.picked_up, actor, at), event(ctx, 'out_for_delivery', PUBLIC_STATUS_LABELS.out_for_delivery, actor, at, 2)],
         notifications: otp ? [otp.notification] : [],
         audit,
       };
@@ -426,7 +426,8 @@ export function decideDriverAction(ctx: OpsContext, a: ValidDriverAction, deps: 
           lastVerifiedAt: ctx.now,
           paidAt: ctx.now,
         };
-        m.events!.splice(1, 0, event(ctx, 'payment_received', 'Payment received', actor));
+        // +1 ms: keeps "Package collected → Payment received → Out for delivery" in order.
+        m.events!.splice(1, 0, event(ctx, 'payment_received', 'Payment received', actor, {}, 1));
         m.audit!.push({ actorUid: uid, actorRole: 'driver', action: 'payment.cash_collected', targetType: 'payment', targetId: `cash_${d.trackingNumber}`, after: { amountPesewas: d.collectOnPickupPesewas } });
       }
       return m;

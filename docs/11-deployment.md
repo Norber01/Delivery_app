@@ -108,6 +108,8 @@ wrangler deploy --env production
 
 **Labels** — senders print the QR label from the booking confirmation or tracking page (`/label/<tracking number>`); drivers can type the tracking number if a label is missing or damaged.
 
+**Hubs (Phase 4)** — define hubs and routes (edit `firebase/seed/network.sample.json` and run the seed, or use the ops app's Network page as an admin). Each service area with intercity traffic needs exactly one active `primaryForArea` hub, and every route connects two such hubs. Grant hub staff the `hub_operator` role with their hubs: `setUserRole { uid, role: 'hub_operator', hubIds: ['acc-01'] }`. Hub screens work with any keyboard-wedge USB/Bluetooth barcode scanner (it types the code and presses Enter); configure scanners to send Enter after each code. Linehaul drivers are ordinary driver accounts who start their shift on the van/truck named on the manifest.
+
 ## 11.6 Cloudflare
 - DNS for the apex and `www` → Pages; `api` → Worker route; `ops` → admin-tools Pages project behind **Cloudflare Access**.
 - WAF managed rules on; rate-limiting rule for `/geocode` (defence in depth alongside the Worker's own limiter).

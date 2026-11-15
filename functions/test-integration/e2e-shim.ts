@@ -29,6 +29,7 @@ import {
   type OpsDeps,
 } from '../src/ops/opsService.js';
 import { fromDoc } from '../src/store/firestoreStore.js';
+import * as hub from '../src/ops/hubService.js';
 import type { BookingRecord } from '../src/store/types.js';
 import { callerFromToken, GUEST } from '../src/lib/auth.js';
 import { toHttpsError } from '../src/lib/errors.js';
@@ -117,6 +118,13 @@ createServer(async (req, res) => {
       requestUpload: () => requestUpload(opsDeps, caller, data),
       getEvidenceUrl: () => getEvidenceUrl(opsDeps, caller, data),
       upsertVehicle: () => upsertVehicle({ ops: opsStore }, caller, data),
+      upsertHub: () => hub.upsertHub({ ops: opsStore }, caller, data),
+      upsertRoute: () => hub.upsertRoute({ ops: opsStore }, caller, data),
+      hubScan: () => hub.hubScan(opsDeps, caller, data),
+      createManifest: () => hub.createManifest(opsDeps, caller, data),
+      addToManifest: () => hub.manifestParcel(opsDeps, caller, data, 'add'),
+      removeFromManifest: () => hub.manifestParcel(opsDeps, caller, data, 'remove'),
+      manifestAction: () => hub.manifestAction(opsDeps, caller, data),
       createDriverAccount: () =>
         createDriverAccount(
           { ops: opsStore },

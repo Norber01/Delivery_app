@@ -40,10 +40,10 @@ Conventions:
 `name` (e.g. "Greater Accra"), `city`, `region` (`GhanaRegion`), `center: LatLng`, `radiusKm`, `active`, `launchDate`. Intra-city pricing applies when pickup **and** destination fall inside the same active service area.
 
 ### `hubs/{id}` — W: S (admin)
-`name`, `code` (e.g. `ACC-01`), `serviceAreaId`, `address`, `location`, `type: hub | warehouse | drop_point`, `operatingHours`, `active`.
+`name`, `code` (e.g. `ACC-01`), `type: hub | warehouse | drop_point`, `serviceAreaId`, `city`, `primaryForArea` (intercity parcels for the area route through it), `address`, `location`, `phone`, `active`. Public read (addresses are public).
 
 ### `routes/{id}` (intercity lanes) — W: S (admin)
-`code` (`ACC-KSI`), `originHubId`, `destinationHubId`, `distanceKm`, `typicalDurationMinutes`, `schedule: { daysOfWeek, departureTimes[] }`, `active`.
+`code` (`ACC-KSI`), `originHubId`, `destinationHubId`, `originAreaId`, `destinationAreaId` (derived from the hubs), `distanceKm`, `typicalDurationMinutes` (sets expected hub arrival), `schedule: { daysOfWeek, departureTimes[] }`, `active`. Customer prices for intercity are separate (pricing rules, per service-area pair).
 
 ### `vehicles/{id}` — W: S
 `registrationNumber`, `vehicleClass: motorbike | car | van | truck`, `capacityKg`, `capacityM3`, `homeHubId`, `status: available | in_use | maintenance | retired`, `odometerKm`, `insuranceExpiry`, `roadworthyExpiry`.
@@ -88,7 +88,7 @@ Short-lived (TTL 30 min). `input` (validated `QuoteRequest`), `result` (`PriceQu
 | deliveryId? | set when operations converts the request into a delivery |
 
 ### `deliveries/{trackingNumber}` — W: S
-Created by the `onBookingWritten` trigger when a booking becomes `confirmed` (doc ID = tracking number, so creation is idempotent). Carries everything drivers and dispatch need, so neither reads the booking: `status: DeliveryStatus`, `heldFrom`, `holdReason`, `deliveryType`, `urgency`, `serviceAreaId`, `requiredVehicleClass`, `sender`, `recipient`, `pickup`, `destination`, `packages`, `specialHandling`, `instructions`, `paymentPreference`, `collectOnPickupPesewas` (cash still to collect), `legs[]` (below), `currentLegId`, `currentAssignmentId`, `currentDriverUid`, `driverUids[]` (every driver who held it: read access + history), `custodian: { type: 'none' | 'driver' | 'hub' | 'vehicle', id? }`, `exceptions[]` (last 20), `openException`, `expectedDeliveryAt` (from `DELIVERY_WINDOWS_HOURS`), `delayed`, `attempts`, `eta { minutes, computedAt }`.
+Created by the `onBookingWritten` trigger when a booking becomes `confirmed` (doc ID = tracking number, so creation is idempotent). Carries everything drivers and dispatch need, so neither reads the booking: `status: DeliveryStatus`, `heldFrom`, `holdReason`, `deliveryType`, `urgency`, `serviceAreaId` (pickup), `destinationAreaId`, `requiredVehicleClass`, `chargeableWeightKg`, intercity `originHub`/`destinationHub` (denormalised `HubRef`), `routeId`, `linehaul { manifestId, departedAt, expectedArrivalAt }`, `sender`, `recipient`, `pickup`, `destination`, `packages`, `specialHandling`, `instructions`, `paymentPreference`, `collectOnPickupPesewas` (cash still to collect), `legs[]` (below), `currentLegId`, `currentAssignmentId`, `currentDriverUid`, `driverUids[]` (every driver who held it: read access + history), `custodian: { type: 'none' | 'driver' | 'hub' | 'vehicle', id? }`, `exceptions[]` (last 20), `openException`, `expectedDeliveryAt` (from `DELIVERY_WINDOWS_HOURS`), `delayed`, `attempts`, `eta { minutes, computedAt }`.
 
 **Legs are embedded** (`legs[]`: `id`, `sequence`, `type: direct | first_mile | linehaul | last_mile`, `status: planned | assigned | in_progress | completed | failed | cancelled`, `assignmentId`, `driverUid`, `vehicleId`) rather than a subcollection: a delivery has at most three, they are always read with the delivery, and custody changes must update leg and delivery atomically.
 
@@ -104,8 +104,8 @@ Idempotency record for each driver-app action (`driverUid`, `deliveryId`, `type`
 ### `uploads/{key}` — W: S
 Upload tickets for POD photos (`deliveryId`, `driverUid`, `contentType`, `maxBytes`, `expiresAt`). A photo key is accepted on a POD only if its ticket belongs to the same driver and delivery and the object exists in R2.
 
-### `manifests/{id}` — W: S (Phase 4)
-`routeId`, `vehicleId`, `driverUids[]`, `departureAt`, `status: open | sealed | departed | arrived | closed`, `deliveryIds[]`, `sealedBy`, `scanCounts`.
+### `manifests/{id}` — W: S
+`number` (e.g. `ACC-KSI-20261116-1800`), `routeId`, `routeCode`, `originHubId`, `destinationHubId`, `vehicleId`, `vehicleRegistration`, `capacityKg`, `driverUid`, `driverName`, `scheduledDepartureAt`, `status: open | sealed | departed | arrived | closed`, `deliveryIds[]` (≤ 150), `totalWeightKg`, `receivedIds[]`, `missingIds[]`, `departedAt`, `expectedArrivalAt`, `arrivedAt`, `closedAt`, `createdBy`. Readable by MFA ops/hub staff and the assigned linehaul driver.
 
 ### `trackingEvents/{id}` — W: S, append-only
 `trackingNumber`, `deliveryId` (null until operations creates the delivery), `trackingNumber`, `type` (status change, scan, hub_in, hub_out, exception, location_checkpoint), `status`, `location?`, `hubId?`, `actorUid`, `actorRole`, `publicMessage` (safe to show customers), `internalNote?`, `occurredAt`.

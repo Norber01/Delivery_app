@@ -74,3 +74,17 @@ Every hand-over is a scan event with the actor's identity:
 ## 5.6 Exceptions
 
 `pickup_failed`, `delivery_failed` require a reason code (`recipient_unavailable`, `wrong_address`, `refused`, `damaged`, `access_denied`, `weather`, `vehicle_breakdown`, `other`) plus optional photo. Dispatch sees exceptions on the board and decides reattempt, return or hold. Deliveries past `expectedDeliveryAt` are flagged as delayed by a scheduled function.
+
+## 5.7 Implementation (Phases 3–4)
+
+| Hand-over | Who scans | Function | Status change | Custodian |
+|---|---|---|---|---|
+| Sender → driver | Driver (label QR) | `driverAction confirm_pickup` | en route → picked up (intercity) / out for delivery (direct) | driver |
+| First-mile driver → origin hub | Hub operator | `hubScan receive` | picked_up → at_origin_hub | hub |
+| Hub → linehaul vehicle | Hub operator (load scans, then Depart) | `addToManifest`, `manifestAction depart` | at_origin_hub → in_transit | vehicle |
+| Vehicle → destination hub | Hub operator (Arrive, then unload scans) | `manifestAction arrive`, `hubScan receive` | in_transit → at_destination_hub | hub |
+| Hub → last-mile driver | Hub operator | `hubScan handover` (driver assigned by dispatch first) | at_destination_hub → out_for_delivery | driver |
+| Driver → recipient | Driver + recipient code | `driverAction complete_delivery` | out_for_delivery → delivered | none |
+| Failed delivery → hub | Hub operator | `hubScan receive` | delivery_failed → at_destination_hub | hub |
+
+Every step runs in one Firestore transaction that checks the current status, custodian and hub, so a parcel cannot be recorded in two places. Intercity return to sender is not automated: the parcel is held at the destination hub and operations arrange the return.

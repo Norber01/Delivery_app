@@ -36,6 +36,10 @@ export function DispatchPage() {
   const visible = deliveries.data.filter((d) => !onlyDelayed || d.delayed);
   const columns: Record<BoardColumn, Delivery[]> = { needs_driver: [], in_progress: [], exceptions: [] };
   for (const d of visible) columns[columnFor(d)].push(d);
+  // Stable order (most urgent first): cards must not jump while a dispatcher is clicking.
+  for (const c of Object.values(columns)) {
+    c.sort((a, b) => a.expectedDeliveryAt.localeCompare(b.expectedDeliveryAt) || a.trackingNumber.localeCompare(b.trackingNumber));
+  }
   const jobs = useMemo(() => countActiveJobs(deliveries.data), [deliveries.data]);
 
   const markers: MapMarker[] = [

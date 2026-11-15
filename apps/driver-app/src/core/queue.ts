@@ -154,6 +154,7 @@ const RETRYABLE = new Set(['unavailable', 'deadline-exceeded', 'internal', 'reso
 export function toActionError(e: unknown): ActionError {
   const err = e as { code?: string; message?: string; details?: { code?: string } };
   const fnCode = (err.code ?? '').replace(/^functions\//, '');
-  if (err.details?.code && !RETRYABLE.has(fnCode)) return new ActionError(err.message ?? 'Rejected', err.details.code, false);
+  const message = (err.message ?? '').replace(/\s*\[\d{3}\]$/, '');
+  if (err.details?.code && !RETRYABLE.has(fnCode)) return new ActionError(message || 'Rejected', err.details.code, false);
   return new ActionError(err.message ?? 'Network error', err.details?.code ?? fnCode ?? 'UNKNOWN', true);
 }

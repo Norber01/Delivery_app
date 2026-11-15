@@ -236,6 +236,9 @@ describe('driver workflow', () => {
     expect(again).toMatchObject({ duplicate: true, status: 'en_route_to_pickup' });
     expect(w.store.events.filter((e) => e.type === 'en_route_to_pickup')).toHaveLength(1);
     await expectCode(driverAction(deps, esi, body), 'PERMISSION_DENIED');
+    // Same id, different action/delivery: rejected, never a false success.
+    await expectCode(driverAction(deps, kwame, { ...body, type: 'confirm_pickup', scannedCode: b.trackingNumber }), 'VALIDATION_FAILED');
+    await expectCode(driverAction(deps, kwame, { ...body, deliveryId: 'GHOTHER' }), 'VALIDATION_FAILED');
   });
 
   it('flags POD captured far from the destination', async () => {
