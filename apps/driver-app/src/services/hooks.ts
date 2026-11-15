@@ -1,11 +1,11 @@
-import type { DeliveryDoc, DriverDoc, VehicleDoc } from '@courier/shared-types';
+import type { DeliveryDoc, DriverDoc, ManifestDoc, VehicleDoc } from '@courier/shared-types';
 import { collection, doc, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import type { QueueSnapshot } from '../core/queue';
 import { db } from './firebase';
 import { actionQueue } from './queue';
 
-export const BUSY_STATUSES = ['assigned', 'en_route_to_pickup', 'out_for_delivery', 'delivery_failed', 'returning_to_sender'];
+export const BUSY_STATUSES = ['assigned', 'en_route_to_pickup', 'picked_up', 'at_destination_hub', 'out_for_delivery', 'delivery_failed', 'returning_to_sender'];
 
 export function useDriver(uid: string) {
   const [driver, setDriver] = useState<DriverDoc | null | undefined>(undefined);
@@ -51,4 +51,17 @@ export function useQueue(): QueueSnapshot {
   const [snap, setSnap] = useState<QueueSnapshot>(actionQueue.snapshot());
   useEffect(() => actionQueue.subscribe(setSnap), []);
   return snap;
+}
+
+/** Linehaul manifests this driver is driving (read access: own manifests only). */
+export function useManifests(uid: string) {
+  const [manifests, setManifests] = useState<ManifestDoc[]>([]);
+  useEffect(
+    () =>
+      onSnapshot(query(collection(db, 'manifests'), where('driverUid', '==', uid), where('status', 'in', ['open', 'sealed', 'departed', 'arrived'])), (s) =>
+        setManifests(s.docs.map((d) => d.data() as ManifestDoc)),
+      ),
+    [uid],
+  );
+  return manifests;
 }

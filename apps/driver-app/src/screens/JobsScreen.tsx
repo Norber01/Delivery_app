@@ -5,7 +5,7 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { nextStep, sortJobs } from '../core/jobs';
 import { Button, Card, Notice, s } from '../components/ui';
 import { api } from '../services/api';
-import { useHistory, useJobs, useQueue } from '../services/hooks';
+import { useHistory, useJobs, useManifests, useQueue } from '../services/hooks';
 import { stopShiftTracking } from '../services/location';
 import { actionQueue } from '../services/queue';
 import { shiftStore } from '../services/storage';
@@ -15,6 +15,7 @@ export function JobsScreen({ driver, onOpen }: { driver: DriverDoc; onOpen: (d: 
   const [tab, setTab] = useState<'current' | 'history'>('current');
   const history = useHistory(driver.uid, tab === 'history');
   const queue = useQueue();
+  const manifests = useManifests(driver.uid);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const list = tab === 'current' ? jobs : history;
@@ -42,6 +43,22 @@ export function JobsScreen({ driver, onOpen }: { driver: DriverDoc; onOpen: (d: 
         <Button title={`Current (${jobs.length})`} tone={tab === 'current' ? 'primary' : 'secondary'} onPress={() => setTab('current')} />
         <Button title="History" tone={tab === 'history' ? 'primary' : 'secondary'} onPress={() => setTab('history')} />
       </View>
+      {tab === 'current' &&
+        manifests.map((m) => (
+          <Card key={m.id}>
+            <Text style={s.h2}>Linehaul {m.routeCode}</Text>
+            <Text style={s.text}>
+              {m.deliveryIds.length} parcel(s) · {m.totalWeightKg} kg · vehicle {m.vehicleRegistration}
+            </Text>
+            <Text style={s.muted}>
+              {m.status === 'departed'
+                ? `On the road — expected ${m.expectedArrivalAt ? new Date(m.expectedArrivalAt).toLocaleTimeString('en-GH', { hour: '2-digit', minute: '2-digit' }) : ''}. Hub staff unload and scan on arrival.`
+                : m.status === 'arrived'
+                  ? 'Arrived — waiting for unloading.'
+                  : `Departs ${new Date(m.scheduledDepartureAt).toLocaleString('en-GH', { weekday: 'short', hour: '2-digit', minute: '2-digit' })}. Hub staff load and release the vehicle.`}
+            </Text>
+          </Card>
+        ))}
       {list.length === 0 && <Text style={s.muted}>{tab === 'current' ? 'No jobs right now. Dispatch will assign you one.' : 'No past jobs yet.'}</Text>}
       {list.map((d) => (
         <Pressable key={d.id} onPress={() => onOpen(d)} accessibilityRole="button">

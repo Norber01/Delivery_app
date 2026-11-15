@@ -163,7 +163,14 @@ function DeliveryPanel({
     query(collection(db, 'trackingEvents'), where('trackingNumber', '==', d.trackingNumber), orderBy('occurredAt', 'desc'), limit(50)),
     [d.trackingNumber],
   );
-  const options = useMemo(() => rankDrivers(d, drivers, locations, jobs, now), [d, drivers, locations, jobs, now]);
+  const leg = d.legs.find((l) => l.id === d.currentLegId);
+  const lastMile = leg?.type === 'last_mile';
+  // Last mile: rank drivers in the destination area by distance from the destination hub.
+  const target = lastMile && d.destinationHub
+    ? { serviceAreaId: d.destinationAreaId ?? '', requiredVehicleClass: d.requiredVehicleClass, pickup: { ...d.pickup, location: d.destinationHub.location } }
+    : d;
+  const options = useMemo(() => rankDrivers(target, drivers, locations, jobs, now), [target, drivers, locations, jobs, now]);
+  const canAssign = (d.status === 'awaiting_assignment' && (leg?.type === 'direct' || leg?.type === 'first_mile')) || (d.status === 'at_destination_hub' && lastMile && !d.currentAssignmentId);
   const isTerminal = ['delivered', 'returned', 'cancelled'].includes(d.status);
 
   async function act(type: Parameters<typeof api.dispatch>[0]['type'], extra: { driverUid?: string; reason?: string } = {}) {
@@ -180,7 +187,6 @@ function DeliveryPanel({
     }
   }
 
-  const leg = d.legs.find((l) => l.id === d.currentLegId);
   const holder = drivers.find((x) => x.uid === d.currentDriverUid);
 
   return (
@@ -218,8 +224,14 @@ function DeliveryPanel({
 
       {!isTerminal && (
         <div className="space-y-3 border-t border-slate-100 pt-3">
-          {d.status === 'awaiting_assignment' &&
-            (leg?.type === 'direct' ? (
+          {d.originHub && (
+            <p className="rounded bg-violet-50 px-3 py-2 text-violet-800">
+              Intercity via {d.originHub.code} → {d.destinationHub?.code} · current leg: {leg?.type.replace('_', ' ')}
+              {leg?.type === 'linehaul' && ' (handled on the hub screen)'}
+            </p>
+          )}
+          {(canAssign || (d.status === 'awaiting_assignment' && leg?.type === 'linehaul')) &&
+            (canAssign ? (
               <div className="space-y-2">
                 <label className="block font-medium" htmlFor="driver-select">
                   Assign driver
@@ -241,10 +253,12 @@ function DeliveryPanel({
                 </button>
               </div>
             ) : (
-              <p className="rounded bg-violet-50 px-3 py-2 text-violet-800">Intercity: dispatched from hub operations (Phase 4).</p>
+              <p className="rounded bg-violet-50 px-3 py-2 text-violet-800">Waiting for the hub team.</p>
             ))}
           <div className="flex flex-wrap gap-2">
-            {d.status === 'assigned' && <ActionButton onClick={() => act('unassign')} busy={busy}>Unassign</ActionButton>}
+            {(d.status === 'assigned' || (d.status === 'at_destination_hub' && d.currentAssignmentId)) && (
+              <ActionButton onClick={() => act('unassign')} busy={busy}>Unassign</ActionButton>
+            )}
             {d.status === 'pickup_failed' && <ActionButton onClick={() => act('reschedule')} busy={busy}>Reschedule pickup</ActionButton>}
             {d.status === 'delivery_failed' && (
               <>

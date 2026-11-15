@@ -163,6 +163,7 @@ describe('operations schemas', async () => {
   it('validates driver actions by type', () => {
     expect(driverActionSchema.safeParse({ ...base, type: 'start_assignment' }).success).toBe(true);
     expect(driverActionSchema.safeParse({ ...base, type: 'report_pickup_failed' }).success).toBe(false); // reason required
+    expect(driverActionSchema.safeParse({ ...base, type: 'report_delivery_failed', reason: 'missing_in_transit' }).success).toBe(false); // system-only
     expect(driverActionSchema.safeParse({ ...base, type: 'complete_delivery', receivedByName: 'Kofi', otp: '12345' }).success).toBe(false);
     expect(driverActionSchema.safeParse({ ...base, type: 'complete_return', receivedByName: 'Ama', signature: sig }).success).toBe(true);
     expect(driverActionSchema.safeParse({ ...base, type: 'complete_delivery', receivedByName: 'Kofi', photoKeys: ['../etc/passwd'] }).success).toBe(false);

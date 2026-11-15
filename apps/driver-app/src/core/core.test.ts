@@ -134,6 +134,7 @@ describe('jobs & signatures', () => {
     ]);
     expect(jobs.map((j) => j.status)).toEqual(['out_for_delivery', 'en_route_to_pickup', 'assigned']);
     expect(nextStep({ status: 'en_route_to_pickup', collectOnPickupPesewas: 100 })).toContain('Collect payment');
+    expect(nextStep({ status: 'picked_up', collectOnPickupPesewas: 0, originHub: { id: 'a', code: 'ACC-01', name: 'Accra Central Hub', city: 'Accra', location: { lat: 0, lng: 0 } } })).toBe('Take the package to Accra Central Hub');
   });
   it('makes 32-char hex action ids', () => {
     expect(newActionId((n) => new Uint8Array(n).fill(171))).toBe('ab'.repeat(16));

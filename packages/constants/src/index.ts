@@ -119,6 +119,9 @@ export const EXCEPTION_REASONS = [
 ] as const;
 export type ExceptionReason = (typeof EXCEPTION_REASONS)[number];
 
+/** Reasons a driver can report (system-detected reasons such as missing_in_transit are excluded). */
+export const DRIVER_EXCEPTION_REASONS = EXCEPTION_REASONS.filter((r) => r !== 'missing_in_transit') as Exclude<ExceptionReason, 'missing_in_transit'>[];
+
 export const POD_METHODS = ['otp', 'signature'] as const;
 export type PodMethod = (typeof POD_METHODS)[number];
 

@@ -2,8 +2,12 @@ import type { DeliveryStatus } from '@courier/constants';
 import type { DeliveryDoc } from '@courier/shared-types';
 
 /** What the driver should do next for a job, in plain words. */
-export function nextStep(d: Pick<DeliveryDoc, 'status' | 'collectOnPickupPesewas'>): string {
+export function nextStep(d: Pick<DeliveryDoc, 'status' | 'collectOnPickupPesewas'> & Partial<Pick<DeliveryDoc, 'originHub' | 'destinationHub'>>): string {
   switch (d.status) {
+    case 'picked_up':
+      return `Take the package to ${d.originHub?.name ?? 'the hub'}`;
+    case 'at_destination_hub':
+      return `Collect the package at ${d.destinationHub?.name ?? 'the hub'}`;
     case 'assigned':
       return 'Start the job when you set off to the pickup';
     case 'en_route_to_pickup':
@@ -19,7 +23,7 @@ export function nextStep(d: Pick<DeliveryDoc, 'status' | 'collectOnPickupPesewas
   }
 }
 
-const ORDER: DeliveryStatus[] = ['out_for_delivery', 'en_route_to_pickup', 'returning_to_sender', 'assigned', 'delivery_failed'];
+const ORDER: DeliveryStatus[] = ['out_for_delivery', 'picked_up', 'en_route_to_pickup', 'returning_to_sender', 'at_destination_hub', 'assigned', 'delivery_failed'];
 
 /** Jobs in working order: packages in hand first, then pickups, then new assignments. */
 export function sortJobs<T extends Pick<DeliveryDoc, 'status' | 'expectedDeliveryAt'>>(jobs: T[]): T[] {

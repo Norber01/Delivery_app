@@ -41,9 +41,11 @@ function LiveSection({ view }: { view: TrackingView }) {
         </div>
       ) : (
         <p className="text-sm text-slate-600">
-          {view.deliveryStatus === 'in_transit' || view.deliveryStatus === 'at_origin_hub' || view.deliveryStatus === 'at_destination_hub'
-            ? 'Your package is moving through our hub network.'
-            : 'The driver’s live location appears here while your package is out for delivery.'}
+          {view.deliveryStatus === 'in_transit' && view.network?.expectedArrivalAtHub
+            ? `On the way from our ${view.network.originHub?.city} hub to our ${view.network.destinationHub?.city} hub — expected around ${new Date(view.network.expectedArrivalAtHub).toLocaleString('en-GH', { weekday: 'short', hour: '2-digit', minute: '2-digit' })}.`
+            : view.deliveryStatus === 'in_transit' || view.deliveryStatus === 'at_origin_hub' || view.deliveryStatus === 'at_destination_hub'
+              ? 'Your package is moving through our hub network. A driver’s live location appears once it is out for delivery.'
+              : 'The driver’s live location appears here while your package is out for delivery.'}
         </p>
       )}
       {showMap && <MapView ariaLabel="Map of your delivery" markers={markers} mapboxToken={config.mapboxPublicToken} height={300} />}

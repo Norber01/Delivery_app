@@ -1,9 +1,9 @@
 import { z } from 'zod';
-import { DISPATCH_ACTIONS, EXCEPTION_REASONS, VEHICLE_CLASSES } from '@courier/constants';
+import { DISPATCH_ACTIONS, DRIVER_EXCEPTION_REASONS, VEHICLE_CLASSES } from '@courier/constants';
 import { ghanaPhoneSchema, latLngSchema, optional, safeText } from './primitives.js';
 
 const id = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
-const reason = z.enum(EXCEPTION_REASONS);
+const reason = z.enum(DRIVER_EXCEPTION_REASONS as [string, ...string[]]).transform((r) => r as (typeof DRIVER_EXCEPTION_REASONS)[number]);
 
 /** Signature strokes normalised to 0..1; capped so a POD document stays small. */
 export const signatureSchema = z

@@ -1,4 +1,4 @@
-import { EXCEPTION_REASONS, type DriverActionType, type ExceptionReason } from '@courier/constants';
+import { DRIVER_EXCEPTION_REASONS, type DriverActionType, type ExceptionReason } from '@courier/constants';
 import type { DeliveryDoc, SignatureStrokes } from '@courier/shared-types';
 import { formatGhs, PUBLIC_STATUS_LABELS } from '@courier/shared-utils';
 import * as Crypto from 'expo-crypto';
@@ -14,7 +14,7 @@ import { config } from '../services/config';
 import { actionQueue } from '../services/queue';
 
 type Mode = 'view' | 'scan' | 'deliver' | 'return' | 'problem';
-const REASON_TEXT: Record<ExceptionReason, string> = {
+const REASON_TEXT: Record<Exclude<ExceptionReason, 'missing_in_transit'>, string> = {
   recipient_unavailable: 'Recipient not available',
   sender_unavailable: 'Sender not available',
   wrong_address: 'Wrong or unclear address',
@@ -46,7 +46,7 @@ export function JobScreen({ job, onBack }: { job: DeliveryDoc; onBack: () => voi
   const [codeLocked, setCodeLocked] = useState(false);
   const [signature, setSignature] = useState<SignatureStrokes | null>(null);
   const [photos, setPhotos] = useState<string[]>([]);
-  const [reason, setReason] = useState<ExceptionReason | null>(null);
+  const [reason, setReason] = useState<Exclude<ExceptionReason, 'missing_in_transit'> | null>(null);
   const [note, setNote] = useState('');
   const highValue = job.specialHandling.includes('high_value');
   const pickupStage = job.status === 'assigned' || job.status === 'en_route_to_pickup';
@@ -87,7 +87,13 @@ export function JobScreen({ job, onBack }: { job: DeliveryDoc; onBack: () => voi
 
   const call = (phone: string) => void Linking.openURL(`tel:${phone}`);
   const navigate = (p: { lat: number; lng: number }) => void Linking.openURL(navigationUrl(p, Platform.OS === 'android' ? 'android' : 'other'));
-  const stop = pickupStage || job.status === 'returning_to_sender' ? { title: 'Pickup', contact: job.sender, address: job.pickup } : { title: 'Delivery', contact: job.recipient, address: job.destination };
+  // Hub legs: first mile ends at the origin hub; last mile starts by collecting at the destination hub.
+  const hub = job.status === 'picked_up' ? job.originHub : job.status === 'at_destination_hub' ? job.destinationHub : null;
+  const stop = hub
+    ? { title: job.status === 'picked_up' ? 'Drop at hub' : 'Collect at hub', contact: { name: hub.name, phone: config.dispatchPhone }, address: { line1: `${hub.name} (${hub.code})`, location: hub.location } as DeliveryDoc['pickup'] }
+    : pickupStage || job.status === 'returning_to_sender'
+      ? { title: 'Pickup', contact: job.sender, address: job.pickup }
+      : { title: 'Delivery', contact: job.recipient, address: job.destination };
 
   return (
     <ScrollView style={s.screen} contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
@@ -111,7 +117,12 @@ export function JobScreen({ job, onBack }: { job: DeliveryDoc; onBack: () => voi
             <Button title="Navigate" onPress={() => navigate(stop.address.location)} />
           </View>
           <View style={{ flex: 1 }}>
-            <Button title={`Call ${stop.title === 'Pickup' ? 'sender' : 'recipient'}`} tone="secondary" onPress={() => call(stop.contact.phone)} />
+            <Button
+              title={hub ? 'Call dispatch' : `Call ${stop.title === 'Pickup' ? 'sender' : 'recipient'}`}
+              tone="secondary"
+              disabled={!stop.contact.phone}
+              onPress={() => call(stop.contact.phone)}
+            />
           </View>
         </View>
       </Card>
@@ -144,6 +155,13 @@ export function JobScreen({ job, onBack }: { job: DeliveryDoc; onBack: () => voi
           )}
           {job.status === 'out_for_delivery' && <Button title="Deliver package" onPress={() => setMode('deliver')} />}
           {job.status === 'returning_to_sender' && <Button title="Hand back to sender" onPress={() => setMode('return')} />}
+          {hub && (
+            <Notice tone="warn">
+              {job.status === 'picked_up'
+                ? `Hand the package to the ${hub.name} team. They scan it in; the job then leaves your list.`
+                : `Collect the package from the ${hub.name} team. They scan it out to you, then deliver as usual.`}
+            </Notice>
+          )}
           {(pickupStage || job.status === 'out_for_delivery') && job.status !== 'assigned' && <Button title="Report a problem" tone="secondary" onPress={() => setMode('problem')} />}
           {config.dispatchPhone ? <Button title="Call dispatch" tone="secondary" onPress={() => call(config.dispatchPhone)} /> : null}
         </View>
@@ -201,7 +219,7 @@ export function JobScreen({ job, onBack }: { job: DeliveryDoc; onBack: () => voi
       {mode === 'problem' && (
         <Card>
           <Text style={s.h2}>What went wrong?</Text>
-          {EXCEPTION_REASONS.map((r) => (
+          {DRIVER_EXCEPTION_REASONS.map((r) => (
             <Pressable key={r} onPress={() => setReason(r)} accessibilityRole="radio" accessibilityState={{ checked: reason === r }}>
               <Text style={[s.text, { paddingVertical: 8, fontWeight: reason === r ? '700' : '400', color: reason === r ? colors.brand : colors.text }]}>
                 {reason === r ? '● ' : '○ '}

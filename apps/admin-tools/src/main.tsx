@@ -2,7 +2,9 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createBrowserRouter, Navigate, NavLink, Outlet, RouterProvider } from 'react-router';
 import './index.css';
-import { AuthProvider, canDispatch, canManageFleet, useStaffAuth } from './lib/auth';
+import { AuthProvider, canDispatch, canManageFleet, canManageNetwork, canOperateHubs, useStaffAuth } from './lib/auth';
+import { HubPage } from './pages/HubPage';
+import { NetworkPage } from './pages/NetworkPage';
 import { config } from './lib/config';
 import { DispatchPage } from './pages/DispatchPage';
 import { FleetPage } from './pages/FleetPage';
@@ -30,7 +32,9 @@ function Shell() {
         <span className="font-bold text-brand-700">{config.companyName} · Ops</span>
         <nav className="flex gap-1">
           {canDispatch(role) && <NavLink to="/dispatch" className={link}>Dispatch</NavLink>}
+          {canOperateHubs(role) && <NavLink to="/hub" className={link}>Hub</NavLink>}
           {canManageFleet(role) && <NavLink to="/fleet" className={link}>Fleet</NavLink>}
+          {canManageNetwork(role) && <NavLink to="/network" className={link}>Network</NavLink>}
         </nav>
         <span className="ml-auto text-sm text-slate-500">
           {user.email} · {role}
@@ -47,6 +51,7 @@ function Shell() {
 function Home() {
   const { role } = useStaffAuth();
   if (canDispatch(role)) return <Navigate to="/dispatch" replace />;
+  if (canOperateHubs(role)) return <Navigate to="/hub" replace />;
   if (canManageFleet(role)) return <Navigate to="/fleet" replace />;
   return <p className="p-8 text-slate-600">Your role ({role}) has no screens yet. Finance and hub tools arrive in later phases.</p>;
 }
@@ -63,6 +68,8 @@ const router = createBrowserRouter([
       { path: '/', element: <Home /> },
       { path: '/dispatch', element: <Guard allow={canDispatch}><DispatchPage /></Guard> },
       { path: '/fleet', element: <Guard allow={canManageFleet}><FleetPage /></Guard> },
+      { path: '/hub', element: <Guard allow={canOperateHubs}><HubPage /></Guard> },
+      { path: '/network', element: <Guard allow={canManageNetwork}><NetworkPage /></Guard> },
       { path: '*', element: <Navigate to="/" replace /> },
     ],
   },
