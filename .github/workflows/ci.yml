@@ -1,0 +1,45 @@
+# Runs on every push: type checks, unit tests, security-rules tests and emulator integration
+# tests, and production builds. Nothing here needs any account or secret.
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: pnpm install --frozen-lockfile
+      - name: Type check
+        run: pnpm typecheck
+      - name: Unit tests
+        run: pnpm test
+      - name: Security rules tests (Firestore + Realtime Database emulators)
+        run: pnpm --filter @courier/rules-tests test:emulator
+      - name: Integration tests (emulators)
+        run: pnpm --filter @courier/functions test:integration
+      - name: Build functions, worker check, web and ops apps
+        run: |
+          pnpm --filter @courier/functions build
+          pnpm --filter @courier/web build
+          pnpm --filter @courier/admin-tools build

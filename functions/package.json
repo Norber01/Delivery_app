@@ -13,7 +13,7 @@
     "build": "node scripts/build.mjs",
     "serve": "pnpm build && firebase emulators:start --only functions,firestore,database",
     "deploy": "pnpm build && firebase deploy --only functions",
-    "test:integration": "firebase emulators:exec --project demo-courier --only firestore \"vitest run --config vitest.integration.config.ts\"",
+    "test:integration": "firebase emulators:exec --project demo-courier --only firestore,database \"vitest run --config vitest.integration.config.ts\"",
     "seed": "tsx scripts/seed.ts",
     "bootstrap-admin": "tsx scripts/bootstrap-admin.ts"
   },
