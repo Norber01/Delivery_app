@@ -2,7 +2,9 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createBrowserRouter, Navigate, NavLink, Outlet, RouterProvider } from 'react-router';
 import './index.css';
-import { AuthProvider, canDispatch, canManageFleet, canManageNetwork, canOperateHubs, useStaffAuth } from './lib/auth';
+import { AuthProvider, canDispatch, canManageBusinesses, canManageFleet, canManageInvoices, canManageNetwork, canOperateHubs, useStaffAuth } from './lib/auth';
+import { BusinessesPage } from './pages/BusinessesPage';
+import { InvoicesPage } from './pages/InvoicesPage';
 import { HubPage } from './pages/HubPage';
 import { NetworkPage } from './pages/NetworkPage';
 import { config } from './lib/config';
@@ -35,6 +37,8 @@ function Shell() {
           {canOperateHubs(role) && <NavLink to="/hub" className={link}>Hub</NavLink>}
           {canManageFleet(role) && <NavLink to="/fleet" className={link}>Fleet</NavLink>}
           {canManageNetwork(role) && <NavLink to="/network" className={link}>Network</NavLink>}
+          {canManageBusinesses(role) && <NavLink to="/businesses" className={link}>Businesses</NavLink>}
+          {canManageInvoices(role) && <NavLink to="/invoices" className={link}>Invoices</NavLink>}
         </nav>
         <span className="ml-auto text-sm text-slate-500">
           {user.email} · {role}
@@ -53,7 +57,8 @@ function Home() {
   if (canDispatch(role)) return <Navigate to="/dispatch" replace />;
   if (canOperateHubs(role)) return <Navigate to="/hub" replace />;
   if (canManageFleet(role)) return <Navigate to="/fleet" replace />;
-  return <p className="p-8 text-slate-600">Your role ({role}) has no screens yet. Finance and hub tools arrive in later phases.</p>;
+  if (canManageInvoices(role)) return <Navigate to="/invoices" replace />;
+  return <p className="p-8 text-slate-600">Your role ({role}) has no screens yet.</p>;
 }
 
 function Guard({ allow, children }: { allow: (r: ReturnType<typeof useStaffAuth>['role']) => boolean; children: React.ReactNode }) {
@@ -70,6 +75,8 @@ const router = createBrowserRouter([
       { path: '/fleet', element: <Guard allow={canManageFleet}><FleetPage /></Guard> },
       { path: '/hub', element: <Guard allow={canOperateHubs}><HubPage /></Guard> },
       { path: '/network', element: <Guard allow={canManageNetwork}><NetworkPage /></Guard> },
+      { path: '/businesses', element: <Guard allow={canManageBusinesses}><BusinessesPage /></Guard> },
+      { path: '/invoices', element: <Guard allow={canManageInvoices}><InvoicesPage /></Guard> },
       { path: '*', element: <Navigate to="/" replace /> },
     ],
   },
