@@ -11,7 +11,7 @@ Monorepo for a company-operated courier service in Ghana: own vehicles, own driv
 | 2 | Payments, customer accounts, tracking | ✅ Implemented & tested (needs Paystack/SMS accounts to go live) |
 | 3 | Driver app, dispatch, intra-city maps | ✅ Implemented & tested in emulators/browsers; driver app needs device field-testing |
 | 4 | Hubs, vehicles, manifests, intercity | ✅ Implemented & tested in emulators/browsers (driver-app hub steps need device testing) |
-| 5 | Business accounts, bulk bookings, invoices | Not started |
+| 5 | Business accounts, bulk bookings, invoices | ✅ Implemented & tested in emulators/browsers (invoice emails and online invoice payment not yet) |
 | 6 | Route optimisation, analytics, fleet | Not started |
 
 **What works in Phase 1:** guests can search addresses (via the edge Worker), describe packages, get a server-calculated itemised price (intra-city, intercity or long-distance, with weight, urgency, handling, bulk and contract rules), and confirm a booking that stores an immutable price snapshot under a unique tracking number.
@@ -22,7 +22,9 @@ Monorepo for a company-operated courier service in Ghana: own vehicles, own driv
 
 **What works in Phase 4:** intercity parcels move pickup driver → origin hub → linehaul manifest → destination hub → last-mile driver, with a scan at every hand-over by hub staff limited to their own hubs; manifests check route, vehicle capacity and that each parcel is on only one; anything not unloaded is flagged missing; customers see "At our Accra hub" / "In transit to Kumasi" with an expected arrival, never a vehicle position.
 
-**Not yet available:** business accounts and bulk bookings (Phase 5), route optimisation and analytics (Phase 6), finance screens, hub drop-off/collection by customers, automated intercity returns.
+**What works in Phase 5:** companies register with their Registrar-General and TIN details and documents, are verified by an administrator, add staff, keep an address book, upload up to 200 deliveries at once from a CSV (checked and priced row by row before anything is booked, with printable labels), and — once finance approves credit — book on a monthly invoice. Finance generates invoices, records payments and sees overdue accounts; businesses see their invoices and monthly delivery reports.
+
+**Not yet available:** route optimisation and analytics (Phase 6), expense and driver-payment screens, invoice emails and online invoice payment, hub drop-off/collection by customers, automated intercity returns.
 
 ## Layout
 

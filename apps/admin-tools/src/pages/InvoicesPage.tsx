@@ -1,8 +1,8 @@
 import { INVOICE_PAYMENT_METHODS } from '@courier/constants';
 import type { InvoiceDoc } from '@courier/shared-types';
 import { formatGhs } from '@courier/shared-utils';
-import { collection, limit, orderBy, query, where } from 'firebase/firestore';
-import { useState, type FormEvent } from 'react';
+import { collection, doc, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
+import { useEffect, useState, type FormEvent } from 'react';
 import { api, type ApiError } from '../lib/api';
 import { getFirebase } from '../lib/firebase';
 import { useQuery } from '../lib/useLive';
@@ -25,7 +25,12 @@ export function InvoicesPage() {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
-  const open = data.find((i) => i._id === openId) ?? null;
+  const [open, setOpen] = useState<InvoiceDoc | null>(null);
+  useEffect(() => {
+    setOpen(null);
+    if (!openId) return;
+    return onSnapshot(doc(db, 'invoices', openId), (s) => setOpen(s.exists() ? (s.data() as InvoiceDoc) : null));
+  }, [db, openId]);
 
   async function generate(e: FormEvent) {
     e.preventDefault();
@@ -77,7 +82,7 @@ export function InvoicesPage() {
             </tbody>
           </table>
         </div>
-        {open ? <InvoiceDetail key={open._id} inv={open} /> : <p className="text-sm text-slate-500">Select an invoice.</p>}
+        {open ? <InvoiceDetail key={open.id} inv={open} /> : <p className="text-sm text-slate-500">Select an invoice.</p>}
       </div>
     </main>
   );
@@ -86,6 +91,7 @@ export function InvoicesPage() {
 function InvoiceDetail({ inv }: { inv: InvoiceDoc }) {
   const outstanding = inv.totalPesewas - inv.paidPesewas;
   const [amount, setAmount] = useState((outstanding / 100).toFixed(2));
+  useEffect(() => setAmount((outstanding / 100).toFixed(2)), [outstanding]);
   const [method, setMethod] = useState<(typeof INVOICE_PAYMENT_METHODS)[number]>('bank_transfer');
   const [reference, setReference] = useState('');
   const [reason, setReason] = useState('');

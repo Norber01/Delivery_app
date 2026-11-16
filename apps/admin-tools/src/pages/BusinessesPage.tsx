@@ -1,7 +1,7 @@
 import type { BusinessDoc } from '@courier/shared-types';
 import { formatGhs } from '@courier/shared-utils';
-import { collection, orderBy, query, where } from 'firebase/firestore';
-import { useState, type FormEvent } from 'react';
+import { collection, doc, onSnapshot, orderBy, query, where } from 'firebase/firestore';
+import { useEffect, useState, type FormEvent } from 'react';
 import { api, type ApiError } from '../lib/api';
 import { canReviewBusinesses, useStaffAuth } from '../lib/auth';
 import { getFirebase } from '../lib/firebase';
@@ -15,7 +15,13 @@ export function BusinessesPage() {
   const [status, setStatus] = useState<(typeof STATUSES)[number]>('pending');
   const { data, error } = useQuery<BusinessDoc>(query(collection(db, 'sellers'), where('verificationStatus', '==', status), orderBy('legalName')), [status]);
   const [openId, setOpenId] = useState<string | null>(null);
-  const open = data.find((b) => b._id === openId) ?? null;
+  // Follow the selected business itself, so it stays open after a decision moves it to another tab.
+  const [open, setOpen] = useState<BusinessDoc | null>(null);
+  useEffect(() => {
+    setOpen(null);
+    if (!openId) return;
+    return onSnapshot(doc(db, 'sellers', openId), (s) => setOpen(s.exists() ? (s.data() as BusinessDoc) : null));
+  }, [db, openId]);
   return (
     <main className="mx-auto grid max-w-6xl gap-4 p-4 lg:grid-cols-[1fr_1.2fr]">
       <section className="space-y-3">
@@ -43,7 +49,7 @@ export function BusinessesPage() {
           ))}
         </ul>
       </section>
-      {open ? <BusinessDetail key={open._id} b={open} /> : <p className="text-sm text-slate-500">Select a business.</p>}
+      {open ? <BusinessDetail key={open.id} b={open} /> : <p className="text-sm text-slate-500">Select a business.</p>}
     </main>
   );
 }

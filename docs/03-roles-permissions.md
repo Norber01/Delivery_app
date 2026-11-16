@@ -44,6 +44,8 @@ Legend: **C** create · **R** read · **U** update · **D** delete/cancel · `ow
 | Support tickets | C fn (with tracking + token) | C/R own | C/R business | C/R business | – | – | R/U | – | R/U (billing) | R/U | R/U |
 | Audit logs | – | – | – | – | – | – | – | – | R (finance actions) | R | R |
 
+> **Phase 5 as built:** business owners and staff both book (single and CSV bulk), use the address book and see reports; only the owner manages staff and sees invoices (staff do not). Verification decisions are admin/super_admin only; credit terms, contract pricing, invoice runs, payments and voids are finance/admin/super_admin. Registration documents are viewable by non-dispatcher operations staff through short-lived signed URLs. Removing a staff member resets their account to `customer` and revokes their sessions; their past bookings stay with the business.
+
 ## 3.3 Enforcement layers
 
 1. **Cloudflare**: WAF, bot management, rate limits; Access in front of the ops app.

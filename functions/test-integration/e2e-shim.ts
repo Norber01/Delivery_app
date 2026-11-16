@@ -6,6 +6,7 @@
  *   :8787  fixed geocoder in place of the edge Worker
  *   :7070  fake Paystack API + hosted checkout page; the real PaystackProvider talks to it and
  *          webhooks are signed exactly like Paystack's (HMAC-SHA512)
+ *   :8788  in-memory evidence store in place of the R2 Worker (same signed-URL checks)
  *
  * Env: FIRESTORE_EMULATOR_HOST, FIREBASE_AUTH_EMULATOR_HOST, SITE_URL (web app origin).
  */
@@ -42,6 +43,12 @@ import { getQuote } from '../src/services/quoteService.js';
 import { handleRefundEvent } from '../src/services/refundService.js';
 import { getTrackingView } from '../src/services/trackingService.js';
 import { FirestoreRateLimiter, FirestoreStore } from '../src/store/firestoreStore.js';
+import { verifyUploadToken } from '@courier/shared-utils';
+import * as businessService from '../src/business/businessService.js';
+import * as bulkService from '../src/business/bulkService.js';
+import * as invoiceService from '../src/business/invoiceService.js';
+import { FirestoreBusinessStore } from '../src/business/firestoreBusiness.js';
+import type { BusinessIdentityPort } from '../src/business/types.js';
 
 const SECRET = 'sk_test_e2e';
 const SITE = process.env.SITE_URL ?? 'http://127.0.0.1:4173';
@@ -58,16 +65,40 @@ const pay: PaymentDeps = { store, rateLimiter, provider: new PaystackProvider(SE
 const quoteDeps = { store, rateLimiter, maps: null, now: () => new Date(), newId: () => randomId() };
 const opsStore = new FirestoreOpsStore(db);
 const live = new RtdbLive(getDatabase(app));
+const UPLOAD_SECRET = 'e2e-upload-secret';
+const objects = new Map<string, { type: string; body: Buffer }>();
 const opsDeps: OpsDeps = {
   ops: opsStore,
   live,
-  evidence: { exists: async () => false }, // POD photos (R2) are covered by unit tests
+  evidence: { exists: async (key: string) => objects.has(key) },
   now: () => new Date(),
   newId: () => randomId(12),
   newOtp: () => String(Math.floor(Math.random() * 1e6)).padStart(6, '0'),
   site,
-  uploads: { workerUrl: 'http://127.0.0.1:8788', secret: 'e2e-upload-secret' },
+  uploads: { workerUrl: 'http://127.0.0.1:8788', secret: UPLOAD_SECRET },
 };
+const bizStore = new FirestoreBusinessStore(db);
+const businessIdentity: BusinessIdentityPort = {
+  getClaims: async (uid) => (await auth.getUser(uid)).customClaims ?? {},
+  async setClaims(uid, claims) {
+    await auth.setCustomUserClaims(uid, claims);
+    await db.collection('users').doc(uid).set({ uid, role: claims.role, businessId: claims.businessId ?? null }, { merge: true });
+  },
+  revokeSessions: (uid) => auth.revokeRefreshTokens(uid),
+  async createUserWithSetupLink(p) {
+    try {
+      await auth.getUserByEmail(p.email);
+      return 'exists';
+    } catch {
+      /* create */
+    }
+    const u = await auth.createUser({ email: p.email, displayName: p.name });
+    return { uid: u.uid, setupLink: await auth.generatePasswordResetLink(p.email) };
+  },
+};
+const businessDeps = { biz: bizStore, ops: opsStore, evidence: opsDeps.evidence, identity: businessIdentity, uploads: opsDeps.uploads, now: () => new Date(), newId: () => randomId(12) };
+const bulkDeps = { store, biz: bizStore, rateLimiter, maps: null, now: () => new Date(), newId: () => randomId(12), site };
+const invoiceDeps = { biz: bizStore, now: () => new Date(), newId: () => randomId(12) };
 // Mirrors the deployed onBookingWritten trigger.
 db.collection('deliveryRequests').onSnapshot((snap) => {
   for (const ch of snap.docChanges()) {
@@ -142,6 +173,21 @@ createServer(async (req, res) => {
       getPaymentStatus: () => getPaymentStatus(pay, data, caller, meta),
       completeSignUp: () => completeSignUp({ store, identity }, caller, data),
       claimBooking: () => claimBooking({ store }, caller, data),
+      requestBusinessDocumentUpload: () => businessService.requestBusinessDocumentUpload(businessDeps, caller, data),
+      registerBusiness: () => businessService.registerBusiness(businessDeps, caller, data),
+      reviewBusiness: () => businessService.reviewBusiness(businessDeps, caller, data),
+      setCreditTerms: () => businessService.setCreditTerms(businessDeps, caller, data),
+      setContractPricing: () => businessService.setContractPricing(businessDeps, caller, data),
+      inviteBusinessStaff: () => businessService.inviteStaff(businessDeps, caller, data),
+      removeBusinessStaff: () => businessService.removeStaff(businessDeps, caller, data),
+      saveAddressEntry: () => businessService.saveAddressEntry(businessDeps, caller, data),
+      deleteAddressEntry: () => businessService.deleteAddressEntry(businessDeps, caller, data),
+      previewBulkBooking: () => bulkService.previewBulkBooking(bulkDeps, caller, data),
+      confirmBulkBooking: () => bulkService.confirmBulkBooking(bulkDeps, caller, data),
+      generateInvoices: () => invoiceService.generateInvoices(invoiceDeps, caller, data),
+      recordInvoicePayment: () => invoiceService.recordInvoicePayment(invoiceDeps, caller, data),
+      voidInvoice: () => invoiceService.voidInvoice(invoiceDeps, caller, data),
+      getBusinessReport: () => invoiceService.getBusinessReport(invoiceDeps, caller, data),
     };
     const h = handlers[fn ?? ''];
     if (!h) return res.writeHead(404, cors).end('{}');
@@ -217,3 +263,24 @@ createServer(async (req, res) => {
   }
   json(res, 404, { status: false, message: 'not found' });
 }).listen(7070, '127.0.0.1', () => console.log('shim ready'));
+
+// ---- :8788 evidence store (stands in for workers/api-edge + R2) ------------------------------
+createServer(async (req, res) => {
+  const h = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*', 'Access-Control-Allow-Methods': 'GET, PUT, OPTIONS' };
+  if (req.method === 'OPTIONS') return res.writeHead(204, h).end();
+  const url = new URL(req.url ?? '/', 'http://x');
+  const key = url.pathname.replace(/^\/evidence\//, '');
+  const ct = url.searchParams.get('ct') ?? undefined;
+  const max = url.searchParams.get('max');
+  const params = { method: req.method as 'GET' | 'PUT', key, expires: Number(url.searchParams.get('exp')), ...(ct ? { contentType: ct } : {}), ...(max ? { maxBytes: Number(max) } : {}) };
+  if (!(await verifyUploadToken(UPLOAD_SECRET, params, url.searchParams.get('sig') ?? '', Math.floor(Date.now() / 1000)))) return res.writeHead(403, h).end('bad signature');
+  if (req.method === 'PUT') {
+    const chunks: Buffer[] = [];
+    for await (const c of req) chunks.push(c as Buffer);
+    objects.set(key, { type: ct ?? 'application/octet-stream', body: Buffer.concat(chunks) });
+    return res.writeHead(201, h).end();
+  }
+  const o = objects.get(key);
+  if (!o) return res.writeHead(404, h).end();
+  res.writeHead(200, { ...h, 'Content-Type': o.type }).end(o.body);
+}).listen(8788, '127.0.0.1');

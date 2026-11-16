@@ -13,7 +13,10 @@ pnpm install
 pnpm test                      # unit tests: shared packages, functions services, worker, web
 pnpm test:rules                # Firestore + RTDB security rules against the emulators
 pnpm --filter @courier/functions test:integration   # FirestoreStore + services against the Firestore emulator
-# Browser E2E: Phases 1–2 functions/test-integration/e2e-browser.cjs, Phase 3 e2e-phase3.cjs (see their headers)
+# Browser E2E (Playwright, no cloud accounts): start emulators, harness and both apps in one go
+functions/test-integration/e2e-up.sh            # logs in /tmp/courier-e2e; `e2e-up.sh stop` to stop
+(cd functions && FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 node test-integration/e2e-seed-users.mjs)
+(cd functions && node test-integration/e2e-phase5.cjs /tmp/courier-e2e)   # also e2e-browser.cjs (1–2), e2e-phase3.cjs, e2e-phase4.cjs (see headers)
 pnpm --filter @courier/admin-tools dev    # ops app on http://localhost:5174
 pnpm --filter @courier/driver-app test    # driver-app core logic (the app itself needs an Android device/emulator)
 
@@ -120,3 +123,5 @@ wrangler deploy --env production
 - Rules: redeploy the previous rules file from git.
 - Pricing: publish the previous rule set as a new version (bookings keep their snapshot regardless).
 - Pages/Worker: Cloudflare dashboard → rollback to previous deployment.
+
+**Business accounts (Phase 5)** — no new secrets. Deploy adds the business callables and two schedules: `monthlyInvoiceRun` (02:13 Accra on the 1st, invoices the previous month) and `markOverdueInvoices` (daily 06:37). Deploy the new Firestore indexes (`firebase deploy --only firestore:indexes`) before the functions, or the invoice and report queries fail. Registration documents land in the same R2 bucket under `kyb/` (images or PDF up to 8 MB; served inline with a sandboxing CSP). Before go-live: give at least one admin the verification duty and one `finance` user the credit/invoice duty (`setUserRole`), add the company's bank and MoMo collection details to the invoice footer text (`apps/web/src/pages/business/InvoicePage.tsx`), and confirm with the company accountant how VAT/levies must appear on invoices.

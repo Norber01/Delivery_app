@@ -26,7 +26,16 @@ Conventions:
 `savedAddresses: Address[]` (max 20), `defaultPaymentPreference`, `marketingOptIn`, `notificationPrefs`.
 
 ### `sellers/{businessId}` (business accounts) — W: S
-`legalName`, `tradingName`, `registrationNumber` (Registrar-General), `tin` (GRA), `verificationStatus: unverified | pending | verified | rejected`, `verificationDocs: R2Key[]`, `ownerUid`, `staffUids: string[]`, `contractPricingId?`, `creditTerms?: { limitPesewas, termDays, approvedBy, approvedAt }`, `billingAddress`.
+`legalName`, `tradingName`, `registrationNumber` (Registrar-General), `tin` (GRA), `contact`, `billingAddress`, `pickupAddress`, `verificationStatus: pending | verified | rejected | suspended`, `verificationNote`, `documentKeys: R2Key[]` (`kyb/{uid}/…`), `ownerUid`, `staffUids: string[]`, `staffDirectory: { [uid]: { name, email } }`, `creditTerms: { limitPesewas, termDays, approvedBy, approvedAt } | null`, `creditUsedPesewas` (invoice-billed bookings not yet paid; changed only inside booking/invoice/cancel transactions), `hasOverdueInvoices`, `contractDiscountPercent` (display; the priced discount comes from `contracts`). Readable by members, finance and admins.
+
+#### `sellers/{businessId}/addressBook/{id}` — W: S
+The business's own customers: `label`, `contact`, `address` (max 2,000). Readable by members.
+
+### `bulkBatches/{id}` — W: S, no client access
+A priced CSV upload held for 60 minutes: `businessId`, `createdBy`, `pickup`, `paymentPreference`, `rows: BulkRowResult[]` (validated, geocoded, priced), `expiresAt`, `created: { [rowIndex]: trackingNumber }` (written in each booking's transaction so a double confirm cannot book a row twice).
+
+### `counters/invoice-{YYYY-MM}` — W: S
+Sequential invoice numbers (`INV-YYYYMM-NNNN`).
 
 ### `drivers/{uid}` — W: S
 `employeeNumber`, `licenseNumber`, `licenseClass`, `licenseExpiry`, `homeHubId`, `status: available | on_shift | off_duty | suspended`, `currentVehicleId?`, `currentShiftId?`.
@@ -134,7 +143,7 @@ Idempotency markers for processed webhook events (`paystack_<event>_<id>`), crea
 `paymentId`, `trackingNumber`, `amountPesewas`, `status: pending | processed | failed`, `providerRefundId`, `reason`, `requestedBy`, `error`. Readable by finance/admin.
 
 ### `refunds/{id}`, `invoices/{id}`, `expenses/{id}`, `driverPayments/{id}` — W: S
-Invoices: `businessId`, `period`, `lines[]` (deliveryIds), `totalPesewas`, `status: draft | issued | paid | overdue | void`, `pdfR2Key`. Expenses: `category: fuel | maintenance | driver_payment | hub | other`, `amountPesewas`, `vehicleId?`, `hubId?`, `receiptR2Key?`, `approvedBy`.
+Invoices: `number`, `businessId`, `businessName`, `tin`, `period` (YYYY-MM), `part` (months over 400 lines are split), `lines[]: { trackingNumber, date, description, reference, amountPesewas }`, `totalPesewas`, `paidPesewas`, `status: issued | partially_paid | paid | overdue | void`, `issuedAt`, `dueAt`, `payments[]: { amountPesewas, method, reference, recordedBy, at }`, `voidReason`. Each invoiced booking carries `invoiceId` (stamped in the invoice's transaction, so no booking is billed twice). Readable by the business owner (not staff), finance and admins; the printable view is rendered by the web app (no stored PDF). Expenses: `category: fuel | maintenance | driver_payment | hub | other`, `amountPesewas`, `vehicleId?`, `hubId?`, `receiptR2Key?`, `approvedBy`.
 
 ## 2.6 Support & audit
 
