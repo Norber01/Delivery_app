@@ -43,6 +43,7 @@ import { getQuote } from '../src/services/quoteService.js';
 import { handleRefundEvent } from '../src/services/refundService.js';
 import { getTrackingView } from '../src/services/trackingService.js';
 import { FirestoreRateLimiter, FirestoreStore } from '../src/store/firestoreStore.js';
+import { setUserRole } from '../src/services/adminService.js';
 import { verifyUploadToken } from '@courier/shared-utils';
 import * as businessService from '../src/business/businessService.js';
 import * as bulkService from '../src/business/bulkService.js';
@@ -173,6 +174,24 @@ createServer(async (req, res) => {
       getPaymentStatus: () => getPaymentStatus(pay, data, caller, meta),
       completeSignUp: () => completeSignUp({ store, identity }, caller, data),
       claimBooking: () => claimBooking({ store }, caller, data),
+      setUserRole: () =>
+        setUserRole(
+          {
+            store,
+            identity: {
+              async find(by) {
+                const u = await ('email' in by ? auth.getUserByEmail(by.email) : auth.getUser(by.uid)).catch(() => null);
+                return u && { uid: u.uid, email: u.email ?? null, name: u.displayName ?? null, claims: u.customClaims ?? {} };
+              },
+              async apply(uid, claims, profile) {
+                await auth.setCustomUserClaims(uid, claims);
+                await db.collection('users').doc(uid).set({ uid, ...profile }, { merge: true });
+              },
+            },
+          },
+          caller,
+          data,
+        ),
       requestBusinessDocumentUpload: () => businessService.requestBusinessDocumentUpload(businessDeps, caller, data),
       registerBusiness: () => businessService.registerBusiness(businessDeps, caller, data),
       reviewBusiness: () => businessService.reviewBusiness(businessDeps, caller, data),

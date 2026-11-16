@@ -59,7 +59,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Check settings
-        run: node -e "import('./deploy/preflight.mjs').then((m) => m.preflight())"
+        run: node deploy/preflight.mjs
       - uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}

@@ -9,7 +9,7 @@ import { AppError } from '../src/lib/errors.js';
 import { sha256Hex } from '../src/lib/hash.js';
 import { createBooking } from '../src/services/bookingService.js';
 import { getQuote, type ServiceDeps } from '../src/services/quoteService.js';
-import { authorizeRoleChange, publishPricingRules } from '../src/services/adminService.js';
+import { authorizeRoleChange, publishPricingRules, setUserRole, type RoleIdentityPort } from '../src/services/adminService.js';
 import { MemoryRateLimiter, MemoryStore } from './memoryStore.js';
 
 const rules = rulesJson as unknown as PricingRuleSet;
@@ -264,6 +264,50 @@ describe('role assignment', () => {
   });
   it('requires a businessId for business roles', () => {
     expect(() => authorizeRoleChange(admin, { uid: 'u2', role: 'business_owner' }, null)).toThrow(AppError);
+  });
+
+  describe('setUserRole (Staff page)', () => {
+    const users = new Map<string, { uid: string; email: string; claims: Record<string, unknown> }>();
+    const applied: { uid: string; claims: Record<string, unknown>; profile: { email: string | null } }[] = [];
+    const identity: RoleIdentityPort = {
+      async find(by) {
+        const u = 'email' in by ? [...users.values()].find((x) => x.email === by.email) : users.get(by.uid);
+        return u ? { uid: u.uid, email: u.email, name: null, claims: u.claims } : null;
+      },
+      async apply(uid, claims, profile) {
+        applied.push({ uid, claims, profile });
+        users.get(uid)!.claims = claims;
+      },
+    };
+    beforeEach(() => {
+      users.clear();
+      applied.length = 0;
+      users.set('u1', { uid: 'u1', email: 'ama@company.gh', claims: { role: 'customer' } });
+      users.set('boss', { uid: 'boss', email: 'boss@company.gh', claims: { role: 'super_admin' } });
+    });
+
+    it('grants a role by the email the person signed up with (any case) and audits it', async () => {
+      const r = await setUserRole({ store, identity }, admin, { email: ' Ama@Company.GH ', role: 'hub_operator', hubIds: ['acc-01'] });
+      expect(r.uid).toBe('u1');
+      expect(applied[0]).toMatchObject({ uid: 'u1', claims: { role: 'hub_operator', hubIds: ['acc-01'] }, profile: { email: 'ama@company.gh' } });
+      expect(store.audit.at(-1)).toMatchObject({ action: 'user.setRole', targetId: 'u1', before: { role: 'customer' } });
+    });
+    it('explains when no account exists for the email', async () => {
+      await expect(setUserRole({ store, identity }, admin, { email: 'nobody@company.gh', role: 'finance' })).rejects.toThrow(/sign up on the website/);
+    });
+    it('keeps the admin safeguards when targeting by email', async () => {
+      await expect(setUserRole({ store, identity }, admin, { email: 'boss@company.gh', role: 'customer' })).rejects.toThrow(/super admin/);
+      await expect(setUserRole({ store, identity }, admin, { email: 'ama@company.gh', role: 'admin' })).rejects.toThrow(/super admin/);
+      expect(applied).toHaveLength(0);
+    });
+    it('refuses non-admins before looking anyone up', async () => {
+      const find = identity.find;
+      let looked = false;
+      identity.find = async (b) => ((looked = true), find(b));
+      await expect(setUserRole({ store, identity }, { uid: 'd', role: 'dispatcher', businessId: null, mfa: true }, { email: 'ama@company.gh', role: 'admin' })).rejects.toThrow(AppError);
+      expect(looked).toBe(false);
+      identity.find = find;
+    });
   });
 });
 

@@ -15,7 +15,7 @@ import { hashIp, randomId } from './lib/hash.js';
 import { HubtelSmsProvider, type SmsProvider } from './notifications/sms.js';
 import { PaystackProvider } from './payments/paystack.js';
 import { claimBooking as claimBookingService, completeSignUp as completeSignUpService, type IdentityPort } from './services/accountService.js';
-import { authorizeRoleChange, publishPricingRules as publishPricingRulesService } from './services/adminService.js';
+import { publishPricingRules as publishPricingRulesService, setUserRole as setUserRoleService } from './services/adminService.js';
 import { createBooking as createBookingService } from './services/bookingService.js';
 import { deliverNotification } from './services/notificationService.js';
 import {
@@ -163,41 +163,29 @@ export const createBooking = callable([], (req) =>
 /** Publish a new pricing version (admin, MFA). */
 export const publishPricingRules = callable([], (req) => publishPricingRulesService(store, callerFromToken(req.auth), req.data));
 
-/** Assign a role via custom claims (admin/super_admin, MFA). */
-export const setUserRole = callable([], async (req) => {
-  const caller = callerFromToken(req.auth);
-  requireRole(caller, ['admin', 'super_admin']); // before any lookup, so non-admins learn nothing
-  const auth = getAuth();
-  const target = await auth.getUser(String((req.data as { uid?: unknown })?.uid ?? '')).catch(() => {
-    throw new AppError('VALIDATION_FAILED', 'User not found.', 'not-found');
-  });
-  const currentRole = (ROLES as readonly string[]).includes(target.customClaims?.role as string)
-    ? (target.customClaims!.role as Role)
-    : null;
-  const input = authorizeRoleChange(caller, req.data, currentRole);
-  const claims = {
-    role: input.role,
-    ...(input.businessId ? { businessId: input.businessId } : {}),
-    ...(input.hubIds ? { hubIds: input.hubIds } : {}),
-  };
-  await auth.setCustomUserClaims(input.uid, claims);
-  await auth.revokeRefreshTokens(input.uid);
-  await db.collection('users').doc(input.uid).set(
-    { uid: input.uid, role: input.role, businessId: input.businessId ?? null, updatedAt: FieldValue.serverTimestamp() },
-    { merge: true },
-  );
-  await store.writeAudit({
-    actorUid: caller.uid,
-    actorRole: caller.role ?? 'guest',
-    action: 'user.setRole',
-    targetType: 'user',
-    targetId: input.uid,
-    before: { role: currentRole },
-    after: claims,
-    ipHash: meta(req).ipHash,
-  });
-  return { ok: true };
-});
+/** Assign a role via custom claims (admin/super_admin, MFA). Target found by uid or email. */
+export const setUserRole = callable([], (req) =>
+  setUserRoleService(
+    {
+      store,
+      identity: {
+        async find(by) {
+          const auth = getAuth();
+          const u = await ('email' in by ? auth.getUserByEmail(by.email) : auth.getUser(by.uid)).catch(() => null);
+          return u && { uid: u.uid, email: u.email ?? null, name: u.displayName ?? null, claims: u.customClaims ?? {} };
+        },
+        async apply(uid, claims, profile) {
+          await getAuth().setCustomUserClaims(uid, claims);
+          await getAuth().revokeRefreshTokens(uid);
+          await db.collection('users').doc(uid).set({ uid, ...profile, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+        },
+      },
+    },
+    callerFromToken(req.auth),
+    req.data,
+    meta(req).ipHash,
+  ),
+);
 
 // ---- Payments (Phase 2) ----------------------------------------------------------
 

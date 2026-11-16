@@ -1,0 +1,48 @@
+# Administration tasks you can run from your phone: GitHub → Actions → Admin tasks → Run workflow.
+name: Admin tasks
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Which environment
+        type: choice
+        options: [staging, production]
+        default: staging
+      task:
+        description: What to do
+        type: choice
+        options: [seed-config, make-super-admin]
+      email:
+        description: Email (for make-super-admin)
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  admin:
+    name: ${{ inputs.task }} (${{ inputs.environment }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: ${{ inputs.environment }}
+    env:
+      DEPLOY_ENV: ${{ inputs.environment }}
+      TASK: ${{ inputs.task }}
+      EMAIL: ${{ inputs.email }}
+      GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: google-github-actions/auth@v2
+        if: env.GCP_SA_KEY != ''
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - name: Run task
+        run: node deploy/admin.mjs

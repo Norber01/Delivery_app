@@ -60,3 +60,12 @@ export function preflight() {
   summary(`Settings check: ✅ project \`${projectId}\` · payments ${cfg.paystack ? 'on' : 'off'} · SMS ${sms ? 'on' : 'off'} · maps on website ${env.MAPBOX_PUBLIC_TOKEN ? 'on' : 'basic'}\n`);
   return cfg;
 }
+
+// `node deploy/preflight.mjs`: the workflow's first step (no cloud access needed).
+if (import.meta.url === `file://${process.argv[1]}`) {
+  try {
+    preflight();
+  } catch {
+    process.exit(1); // the explanation is already in the run summary
+  }
+}

@@ -46,6 +46,44 @@ export function authorizeRoleChange(caller: Caller, raw: unknown, targetCurrentR
   return input;
 }
 
+export interface RoleIdentityPort {
+  find(by: { uid: string } | { email: string }): Promise<{ uid: string; email: string | null; name: string | null; claims: Record<string, unknown> } | null>;
+  apply(
+    uid: string,
+    claims: Record<string, unknown>,
+    profile: { role: Role; businessId: string | null; hubIds: string[]; email: string | null; name: string | null },
+  ): Promise<void>;
+}
+
+/**
+ * Grant or remove a role. The ops app's Staff page finds people by the email they signed up
+ * with; the change takes effect at their next sign-in (sessions are revoked).
+ */
+export async function setUserRole(deps: { store: Store; identity: RoleIdentityPort }, caller: Caller, raw: unknown, ipHash: string | null = null) {
+  requireRole(caller, ['admin', 'super_admin']); // before any lookup, so non-admins learn nothing
+  const data = (raw ?? {}) as { uid?: unknown; email?: unknown };
+  const email = typeof data.email === 'string' ? data.email.trim().toLowerCase() : '';
+  const target = email && !data.uid ? await deps.identity.find({ email }) : await deps.identity.find({ uid: String(data.uid ?? '') });
+  if (!target) {
+    throw new AppError('VALIDATION_FAILED', email ? 'No account with that email. Ask the person to sign up on the website first.' : 'User not found.', 'not-found');
+  }
+  const currentRole = (ROLES as readonly string[]).includes(target.claims.role as string) ? (target.claims.role as Role) : null;
+  const input = authorizeRoleChange(caller, { ...(raw as object), uid: target.uid }, currentRole);
+  const claims = { role: input.role, ...(input.businessId ? { businessId: input.businessId } : {}), ...(input.hubIds ? { hubIds: input.hubIds } : {}) };
+  await deps.identity.apply(target.uid, claims, { role: input.role, businessId: input.businessId ?? null, hubIds: input.hubIds ?? [], email: target.email, name: target.name });
+  await deps.store.writeAudit({
+    actorUid: caller.uid,
+    actorRole: caller.role ?? 'guest',
+    action: 'user.setRole',
+    targetType: 'user',
+    targetId: target.uid,
+    before: { role: currentRole },
+    after: claims,
+    ipHash,
+  });
+  return { ok: true, uid: target.uid };
+}
+
 export async function publishPricingRules(store: Store, caller: Caller, raw: unknown): Promise<{ version: number }> {
   requireRole(caller, ['admin', 'super_admin']);
   // `version` is assigned by the server; accept any placeholder from the editor.

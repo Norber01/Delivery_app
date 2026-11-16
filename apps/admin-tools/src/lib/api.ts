@@ -46,4 +46,5 @@ export const api = {
     call<typeof req, { invoices: { id: string; number: string; businessId: string; totalPesewas: number }[] }>('generateInvoices', req),
   recordInvoicePayment: (req: { invoiceId: string; amountPesewas: number; method: string; reference: string }) => call<typeof req, { status: string }>('recordInvoicePayment', req),
   voidInvoice: (req: { invoiceId: string; reason: string }) => call<typeof req, { status: string }>('voidInvoice', req),
+  setUserRole: (req: { email?: string; uid?: string; role: string; hubIds?: string[] }) => call<typeof req, { ok: boolean }>('setUserRole', req),
 };

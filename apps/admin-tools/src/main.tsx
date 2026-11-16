@@ -5,6 +5,7 @@ import './index.css';
 import { AuthProvider, canDispatch, canManageBusinesses, canManageFleet, canManageInvoices, canManageNetwork, canOperateHubs, useStaffAuth } from './lib/auth';
 import { BusinessesPage } from './pages/BusinessesPage';
 import { InvoicesPage } from './pages/InvoicesPage';
+import { StaffPage } from './pages/StaffPage';
 import { HubPage } from './pages/HubPage';
 import { NetworkPage } from './pages/NetworkPage';
 import { config } from './lib/config';
@@ -30,17 +31,18 @@ function Shell() {
   const link = ({ isActive }: { isActive: boolean }) => `rounded px-3 py-1.5 text-sm font-medium ${isActive ? 'bg-brand-50 text-brand-700' : 'text-slate-600 hover:text-slate-900'}`;
   return (
     <div className="min-h-screen">
-      <header className="flex items-center gap-4 border-b border-slate-200 bg-white px-4 py-2">
+      <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-slate-200 bg-white px-4 py-2">
         <span className="font-bold text-brand-700">{config.companyName} · Ops</span>
-        <nav className="flex gap-1">
+        <nav className="-mx-1 flex max-w-full gap-1 overflow-x-auto">
           {canDispatch(role) && <NavLink to="/dispatch" className={link}>Dispatch</NavLink>}
           {canOperateHubs(role) && <NavLink to="/hub" className={link}>Hub</NavLink>}
           {canManageFleet(role) && <NavLink to="/fleet" className={link}>Fleet</NavLink>}
           {canManageNetwork(role) && <NavLink to="/network" className={link}>Network</NavLink>}
+          {canManageNetwork(role) && <NavLink to="/staff" className={link}>Staff</NavLink>}
           {canManageBusinesses(role) && <NavLink to="/businesses" className={link}>Businesses</NavLink>}
           {canManageInvoices(role) && <NavLink to="/invoices" className={link}>Invoices</NavLink>}
         </nav>
-        <span className="ml-auto text-sm text-slate-500">
+        <span className="ml-auto hidden text-sm text-slate-500 sm:inline">
           {user.email} · {role}
         </span>
         <button className="btn-secondary py-1" onClick={() => signOut()}>
@@ -75,6 +77,7 @@ const router = createBrowserRouter([
       { path: '/fleet', element: <Guard allow={canManageFleet}><FleetPage /></Guard> },
       { path: '/hub', element: <Guard allow={canOperateHubs}><HubPage /></Guard> },
       { path: '/network', element: <Guard allow={canManageNetwork}><NetworkPage /></Guard> },
+      { path: '/staff', element: <Guard allow={canManageNetwork}><StaffPage /></Guard> },
       { path: '/businesses', element: <Guard allow={canManageBusinesses}><BusinessesPage /></Guard> },
       { path: '/invoices', element: <Guard allow={canManageInvoices}><InvoicesPage /></Guard> },
       { path: '*', element: <Navigate to="/" replace /> },
