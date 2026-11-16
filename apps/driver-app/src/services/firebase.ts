@@ -20,11 +20,16 @@ const getReactNativePersistence = (FirebaseAuth as unknown as { getReactNativePe
 const app = getApps().length ? getApp() : initializeApp(config.firebase);
 
 /**
- * App Check tokens come from Play Integrity through React Native Firebase (debug provider in
- * development builds), handed to the JS SDK so callables and RTDB writes are attested.
+ * App Check tokens come from Play Integrity through React Native Firebase, handed to the JS SDK so
+ * callables and RTDB writes are attested. Play Integrity only vouches for apps installed from
+ * Google Play; builds installed directly on phones (APK) carry a per-build App Check debug token
+ * registered by the build workflow instead, which is revoked by deleting it in the Firebase console.
  */
+const buildToken = process.env.EXPO_PUBLIC_APPCHECK_DEBUG_TOKEN || undefined;
 const nativeProvider = new ReactNativeFirebaseAppCheckProvider();
-nativeProvider.configure({ android: { provider: __DEV__ ? 'debug' : 'playIntegrity' } });
+nativeProvider.configure({
+  android: __DEV__ || buildToken ? { provider: 'debug', ...(buildToken ? { debugToken: buildToken } : {}) } : { provider: 'playIntegrity' },
+});
 const nativeAppCheck = initializeNativeAppCheck(getNativeApp(), { provider: nativeProvider, isTokenAutoRefreshEnabled: true });
 
 export const appCheck: AppCheck = initializeAppCheck(app, {
