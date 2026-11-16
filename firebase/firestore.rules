@@ -44,6 +44,12 @@ service cloud.firestore {
     match /sellers/{businessId} {
       allow read: if isBusinessMember(businessId) || isAdmin() || staffIn(['finance']);
       allow write: if false;
+
+      // The business's own customers; written through validated functions only.
+      match /addressBook/{entryId} {
+        allow read: if isBusinessMember(businessId);
+        allow write: if false;
+      }
     }
 
     // ---- Operations (Phase 3) ------------------------------------------------

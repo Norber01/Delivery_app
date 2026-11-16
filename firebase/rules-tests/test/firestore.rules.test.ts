@@ -218,3 +218,43 @@ describe('Phase 4: hubs and manifests', () => {
     await assertSucceeds(getDoc(doc(guest(), 'hubs/acc-01'))); // hub addresses are public
   });
 });
+
+describe('Phase 5: business accounts', () => {
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await setDoc(doc(db, 'sellers/biz1'), { ownerUid: 'ama', creditUsedPesewas: 0, creditTerms: { limitPesewas: 100000 } });
+      await setDoc(doc(db, 'sellers/biz1/addressBook/e1'), { label: 'Kofi' });
+      await setDoc(doc(db, 'invoices/inv1'), { businessId: 'biz1', totalPesewas: 5000 });
+      await setDoc(doc(db, 'bulkBatches/bb1'), { businessId: 'biz1' });
+      await setDoc(doc(db, 'counters/invoice-2026-11'), { value: 3 });
+    });
+  });
+  const owner = () => as('ama', { role: 'business_owner', businessId: 'biz1' });
+  const staff = () => as('efua', { role: 'business_staff', businessId: 'biz1' });
+  const otherOwner = () => as('bob', { role: 'business_owner', businessId: 'biz2' });
+
+  it('members read their business and address book; others cannot', async () => {
+    await assertSucceeds(getDoc(doc(owner(), 'sellers/biz1')));
+    await assertSucceeds(getDoc(doc(staff(), 'sellers/biz1/addressBook/e1')));
+    await assertFails(getDoc(doc(otherOwner(), 'sellers/biz1')));
+    await assertFails(getDoc(doc(otherOwner(), 'sellers/biz1/addressBook/e1')));
+    await assertFails(getDoc(doc(as('c', { role: 'customer', businessId: 'biz1' }), 'sellers/biz1')));
+  });
+
+  it('nobody raises their own credit or edits the address book directly', async () => {
+    await assertFails(updateDoc(doc(owner(), 'sellers/biz1'), { 'creditTerms.limitPesewas': 99999999 }));
+    await assertFails(updateDoc(doc(owner(), 'sellers/biz1'), { creditUsedPesewas: 0 }));
+    await assertFails(setDoc(doc(staff(), 'sellers/biz1/addressBook/e2'), { label: 'x' }));
+  });
+
+  it('invoices are for the owner and finance, not staff; batches and counters are server-only', async () => {
+    await assertSucceeds(getDoc(doc(owner(), 'invoices/inv1')));
+    await assertFails(getDoc(doc(staff(), 'invoices/inv1')));
+    await assertFails(getDoc(doc(otherOwner(), 'invoices/inv1')));
+    await assertSucceeds(getDoc(doc(as('f', { role: 'finance', ...mfa }), 'invoices/inv1')));
+    await assertFails(updateDoc(doc(as('f', { role: 'finance', ...mfa }), 'invoices/inv1'), { status: 'paid' }));
+    await assertFails(getDoc(doc(owner(), 'bulkBatches/bb1')));
+    await assertFails(getDoc(doc(owner(), 'counters/invoice-2026-11')));
+  });
+});

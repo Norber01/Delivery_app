@@ -107,6 +107,10 @@ export async function createBooking(
       guestAccessHash: guestToken ? sha256Hex(guestToken) : null,
       deliveryId: null,
       source: isBusiness ? 'business_portal' : 'web',
+      // Explicit nulls: Firestore queries for `invoiceId == null` do not match missing fields.
+      clientReference: null,
+      bulkBatchId: null,
+      invoiceId: null,
     };
     const now = deps.now();
     const events = [
@@ -152,6 +156,10 @@ export async function createBooking(
         throw new AppError('QUOTE_ALREADY_USED', 'This quote has already been used for a booking.');
       case 'quote_not_found':
         throw new AppError('QUOTE_NOT_FOUND', 'This quote could not be found. Please get a new quote.', 'not-found');
+      case 'credit_refused':
+        throw new AppError('CREDIT_LIMIT_EXCEEDED', 'Invoice billing is not available: the credit limit is reached or an invoice is overdue.', 'failed-precondition');
+      case 'row_already_created':
+        throw new AppError('VALIDATION_FAILED', 'Already booked.', 'already-exists');
       case 'tracking_number_taken':
         continue;
     }

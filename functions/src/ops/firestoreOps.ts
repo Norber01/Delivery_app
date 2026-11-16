@@ -98,6 +98,7 @@ export class FirestoreOpsStore implements OpsStore {
         });
       }
       if (m.booking) tx.update(bookingRef, { ...m.booking, updatedAt: FieldValue.serverTimestamp() });
+      if (m.creditRelease) tx.update(this.col('sellers').doc(m.creditRelease.businessId), { creditUsedPesewas: FieldValue.increment(-m.creditRelease.amountPesewas) });
       if (m.assignmentCreate) tx.create(this.col('assignments').doc(m.assignmentCreate.id), m.assignmentCreate);
       if (m.assignmentUpdate && assignmentRef) tx.update(assignmentRef, m.assignmentUpdate);
       if (m.podSecret === null) tx.delete(podRef);

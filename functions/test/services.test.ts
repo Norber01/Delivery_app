@@ -204,8 +204,15 @@ describe('createBooking', () => {
     store.businesses.set('biz1', { id: 'biz1', verificationStatus: 'verified', creditApproved: false });
     await expectAppError(quoteThenBook(biz, { paymentPreference: 'business_invoice' }), 'PAYMENT_METHOD_NOT_ALLOWED');
     store.businesses.set('biz1', { id: 'biz1', verificationStatus: 'verified', creditApproved: true });
+    store.sellers.set('biz1', { verificationStatus: 'verified', creditTerms: { limitPesewas: 5000 }, creditUsedPesewas: 0, hasOverdueInvoices: false });
     const ok = await quoteThenBook(biz, { paymentPreference: 'business_invoice' });
     expect(ok.paymentStatus).toBe('invoiced');
+    expect(store.sellers.get('biz1')!.creditUsedPesewas).toBe(3490);
+    // The next 3490 booking would exceed the 5000 limit: refused inside the transaction.
+    await expectAppError(quoteThenBook(biz, { paymentPreference: 'business_invoice' }), 'CREDIT_LIMIT_EXCEEDED');
+    store.sellers.get('biz1')!.hasOverdueInvoices = true;
+    store.sellers.get('biz1')!.creditTerms = { limitPesewas: 1_000_000 };
+    await expectAppError(quoteThenBook(biz, { paymentPreference: 'business_invoice' }), 'CREDIT_LIMIT_EXCEEDED');
     expect(store.bookings.get(ok.trackingNumber)!.businessId).toBe('biz1');
   });
 

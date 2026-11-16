@@ -3,6 +3,7 @@ import type { ContractTerms, DeliveryRequestDoc, PricingRuleSet, ServiceArea } f
 import { FieldValue, Timestamp, type DocumentReference, type Firestore, type Transaction } from 'firebase-admin/firestore';
 import type {
   AuditEntry,
+  CreateBookingExtras,
   BookingRecord,
   BusinessAccount,
   CreateBookingOutcome,
@@ -136,25 +137,43 @@ export class FirestoreStore implements Store {
 
   async createBooking(
     booking: DeliveryRequestDoc,
-    quoteId: string,
+    quoteId: string | null,
     audit: AuditEntry,
-    extras: { events?: TrackingEventRecord[]; notifications?: NewNotification[] } = {},
+    extras: CreateBookingExtras = {},
   ): Promise<CreateBookingOutcome> {
-    const quoteRef = this.db.collection(COLLECTIONS.quotes).doc(quoteId);
+    const quoteRef = quoteId ? this.db.collection(COLLECTIONS.quotes).doc(quoteId) : null;
     const bookingRef = this.db.collection(COLLECTIONS.deliveryRequests).doc(booking.trackingNumber);
+    const sellerRef = booking.paymentPreference === 'business_invoice' && booking.businessId ? this.db.collection(COLLECTIONS.sellers).doc(booking.businessId) : null;
+    const batchRef = extras.batchRow ? this.db.collection(COLLECTIONS.bulkBatches).doc(extras.batchRow.batchId) : null;
     const auditRef = this.db.collection(COLLECTIONS.auditLogs).doc();
     return this.db.runTransaction(async (tx) => {
-      const [quote, existing] = await Promise.all([tx.get(quoteRef), tx.get(bookingRef)]);
-      if (!quote.exists) return 'quote_not_found';
-      if (quote.get('usedByTrackingNumber')) return 'quote_already_used';
+      const [quote, existing, seller, batch] = await Promise.all([
+        quoteRef ? tx.get(quoteRef) : null,
+        tx.get(bookingRef),
+        sellerRef ? tx.get(sellerRef) : null,
+        batchRef ? tx.get(batchRef) : null,
+      ]);
+      if (quoteRef && !quote?.exists) return 'quote_not_found';
+      if (quote?.get('usedByTrackingNumber')) return 'quote_already_used';
+      if (batch && extras.batchRow && (batch.get('created') as Record<string, string> | undefined)?.[String(extras.batchRow.index)]) return 'row_already_created';
       if (existing.exists) return 'tracking_number_taken';
+      if (sellerRef) {
+        const sd = seller?.data();
+        const terms = sd?.creditTerms as { limitPesewas: number } | null | undefined;
+        const used = (sd?.creditUsedPesewas as number | undefined) ?? 0;
+        if (!sd || sd.verificationStatus !== 'verified' || !terms || sd.hasOverdueInvoices || used + booking.price.totalPesewas > terms.limitPesewas) {
+          return 'credit_refused';
+        }
+        tx.update(sellerRef, { creditUsedPesewas: FieldValue.increment(booking.price.totalPesewas) });
+      }
       tx.create(bookingRef, {
         ...booking,
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
         createdBy: booking.customerUid ?? 'guest',
       });
-      tx.update(quoteRef, { usedByTrackingNumber: booking.trackingNumber });
+      if (quoteRef) tx.update(quoteRef, { usedByTrackingNumber: booking.trackingNumber });
+      if (batchRef && extras.batchRow) tx.update(batchRef, { [`created.${extras.batchRow.index}`]: booking.trackingNumber });
       tx.create(auditRef, { ...audit, at: FieldValue.serverTimestamp() });
       for (const e of extras.events ?? []) tx.create(this.db.collection(COLLECTIONS.trackingEvents).doc(), e);
       for (const n of extras.notifications ?? []) tx.create(this.db.collection(COLLECTIONS.notifications).doc(), notificationDoc(n));

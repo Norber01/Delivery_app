@@ -76,6 +76,10 @@ export class MemoryOpsStore implements OpsStore {
     if (m.delivery) Object.assign(d, clone(m.delivery));
     if (m.addDriverUid && !d.driverUids.includes(m.addDriverUid)) d.driverUids.push(m.addDriverUid);
     if (m.booking) Object.assign(b, m.booking);
+    if (m.creditRelease) {
+      const sd = this.store.sellers.get(m.creditRelease.businessId);
+      if (sd) sd.creditUsedPesewas -= m.creditRelease.amountPesewas;
+    }
     if (m.assignmentCreate) this.assignments.set(m.assignmentCreate.id, clone(m.assignmentCreate));
     if (m.assignmentUpdate && a) Object.assign(a, m.assignmentUpdate);
     if (m.podSecret === null) this.podSecrets.delete(id);

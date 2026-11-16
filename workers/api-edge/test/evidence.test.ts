@@ -62,3 +62,16 @@ describe('evidence storage', () => {
     expect((await call(await signed('GET', { key: '../secrets.txt' }))).status).toBe(404);
   });
 });
+
+describe('business documents', () => {
+  it('accepts signed PDF uploads under kyb/ and still refuses PDFs under pod/', async () => {
+    const { bucket, call } = setup();
+    const kyb = 'kyb/ama/AbCdEfGhIjKlMnOpQrSt.pdf';
+    const pdf = (n: number) => ({ method: 'PUT', body: new Uint8Array(n), headers: { 'Content-Type': 'application/pdf', 'Content-Length': String(n) } });
+    expect((await call(await signed('PUT', { key: kyb, contentType: 'application/pdf' }), pdf(500))).status).toBe(201);
+    expect(bucket.objects.get(kyb)?.contentType).toBe('application/pdf');
+    const get = await call(await signed('GET', { key: kyb }));
+    expect(get.headers.get('Content-Security-Policy')).toContain('sandbox');
+    expect((await call(await signed('PUT', { key: 'pod/GHX/AbCdEfGhIjKlMnOpQrSt.pdf', contentType: 'application/pdf' }), pdf(500))).status).toBe(404);
+  });
+});

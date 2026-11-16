@@ -185,3 +185,39 @@ describe('operations schemas', async () => {
     expect(vehicleSchema.safeParse({ registrationNumber: 'ABCDEF', vehicleClass: 'car', capacityKg: 20, homeServiceAreaId: 'accra', status: 'available' }).success).toBe(false);
   });
 });
+
+describe('business & bulk schemas', async () => {
+  const { bulkCsvRowSchema, registerBusinessSchema, recordInvoicePaymentSchema } = await import('../src/index.js');
+  const row = {
+    reference: 'ORD-1001', recipient_name: 'Yaw Boateng', recipient_phone: '020 123 4567', recipient_email: '',
+    address_line1: 'Adum Market', landmark: '', city: 'Kumasi', region: ' Ashanti ', ghanapost_gps: 'ak-039-5028',
+    lat: '', lng: '', description: 'Shoes', weight_kg: '1.5', length_cm: '30', width_cm: '20', height_cm: '10',
+    quantity: '', urgency: 'Same Day', special_handling: 'Fragile; liquid', declared_value_ghs: '', instructions: '',
+  };
+  it('converts CSV strings to typed values', () => {
+    const r = bulkCsvRowSchema.parse(row);
+    expect(r).toMatchObject({ recipient_phone: '+233201234567', region: 'Ashanti', ghanapost_gps: 'AK-039-5028', weight_kg: 1.5, urgency: 'same_day', special_handling: ['fragile', 'liquid'] });
+    expect(r.quantity).toBeUndefined();
+    expect(r.lat).toBeUndefined();
+  });
+  it('reports precise per-field errors', () => {
+    const r = bulkCsvRowSchema.safeParse({ ...row, weight_kg: 'heavy', region: 'Lagos' });
+    expect(r.success).toBe(false);
+    const paths = r.error!.issues.map((i) => `${i.path.join('.')}: ${i.message}`);
+    expect(paths).toEqual(['region: Please choose an option', 'weight_kg: weight_kg must be a number']);
+    // Cross-field checks run once the individual fields are valid.
+    const half = bulkCsvRowSchema.safeParse({ ...row, lat: '5.6' });
+    expect(half.error!.issues.map((i) => i.message)).toEqual(['Give both lat and lng, or neither']);
+  });
+  it('validates Ghana TINs and requires documents', () => {
+    const addr = { line1: '1 Ring Road', city: 'Accra', region: 'Greater Accra', location: { lat: 5.57, lng: -0.21 } };
+    const base = { legalName: 'Ama Styles Ltd', tradingName: 'Ama Styles', registrationNumber: 'cs123456789', tin: 'c0012345678', contact: { name: 'Ama', phone: '0241234567' }, billingAddress: addr, pickupAddress: addr, documentKeys: ['kyb/biz1/AbCdEfGhIj.pdf'] };
+    expect(registerBusinessSchema.parse(base)).toMatchObject({ tin: 'C0012345678', registrationNumber: 'CS123456789' });
+    expect(registerBusinessSchema.safeParse({ ...base, tin: '12345' }).success).toBe(false);
+    expect(registerBusinessSchema.safeParse({ ...base, documentKeys: [] }).success).toBe(false);
+    expect(registerBusinessSchema.safeParse({ ...base, documentKeys: ['pod/x/AbCdEfGhIj.jpg'] }).success).toBe(false);
+  });
+  it('requires positive invoice payments', () => {
+    expect(recordInvoicePaymentSchema.safeParse({ invoiceId: 'inv1', amountPesewas: 0, method: 'bank_transfer', reference: 'TX1' }).success).toBe(false);
+  });
+});

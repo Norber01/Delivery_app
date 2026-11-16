@@ -88,6 +88,8 @@ export interface OpsMutation {
   fail?: AppError;
   /** Mark the delivery as received on its manifest (linehaul arrival scan). */
   manifestReceived?: string;
+  /** Release reserved business credit (cancelled before invoicing). */
+  creditRelease?: { businessId: string; amountPesewas: number };
 }
 
 export interface DriverActionRecord {

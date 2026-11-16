@@ -41,7 +41,22 @@ export interface BusinessAccount {
   creditApproved: boolean;
 }
 
-export type CreateBookingOutcome = 'created' | 'tracking_number_taken' | 'quote_already_used' | 'quote_not_found';
+export type CreateBookingOutcome =
+  | 'created'
+  | 'tracking_number_taken'
+  | 'quote_already_used'
+  | 'quote_not_found'
+  /** Invoice billing refused: business not verified, no credit, overdue invoices, or limit reached. */
+  | 'credit_refused'
+  /** Bulk row already turned into a booking (idempotent retry). */
+  | 'row_already_created';
+
+export interface CreateBookingExtras {
+  events?: TrackingEventRecord[];
+  notifications?: NewNotification[];
+  /** Bulk booking: mark this batch row as created in the same transaction. */
+  batchRow?: { batchId: string; index: number };
+}
 
 export interface BookingRecord extends DeliveryRequestDoc {
   createdAt: Date;
@@ -156,12 +171,11 @@ export interface Store {
    * Atomically: verify the quote is unused, create `deliveryRequests/{trackingNumber}`
    * (must not exist), mark the quote used and append the audit entry.
    */
-  createBooking(
-    booking: DeliveryRequestDoc,
-    quoteId: string,
-    audit: AuditEntry,
-    extras?: { events?: TrackingEventRecord[]; notifications?: NewNotification[] },
-  ): Promise<CreateBookingOutcome>;
+  /**
+   * Atomically create the booking. With a `quoteId`, the quote must be unused and is consumed.
+   * Invoice-billed bookings reserve credit on the business in the same transaction.
+   */
+  createBooking(booking: DeliveryRequestDoc, quoteId: string | null, audit: AuditEntry, extras?: CreateBookingExtras): Promise<CreateBookingOutcome>;
 
   getBooking(trackingNumber: string): Promise<BookingRecord | null>;
   listTrackingEvents(trackingNumber: string): Promise<TrackingEventRecord[]>;

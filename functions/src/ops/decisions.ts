@@ -300,13 +300,24 @@ export function decideDispatch(ctx: OpsContext, a: ValidDispatchAction, deps: Di
         throw new AppError('INVALID_TRANSITION', 'Deliveries can only be cancelled before the package is collected.');
       }
       const paid = ctx.booking.paymentStatus === 'paid';
+      const b = ctx.booking;
+      // Invoice-billed and not yet invoiced: give the reserved credit back to the business.
+      const creditRelease =
+        b.paymentPreference === 'business_invoice' && b.paymentStatus === 'invoiced' && !b.invoiceId && b.businessId
+          ? { businessId: b.businessId, amountPesewas: b.price.totalPesewas }
+          : undefined;
       return {
         ...(ctx.assignment && ctx.assignment.status !== 'cancelled' && ctx.assignment.status !== 'failed' ? { assignmentUpdate: { status: 'cancelled', endedAt: ctx.now } } : {}),
         delivery: { status: 'cancelled', currentAssignmentId: null, currentDriverUid: null, heldFrom: null, openException: null },
         booking: { status: 'cancelled' },
         events: [event(ctx, 'cancelled', PUBLIC_STATUS_LABELS.cancelled, actor, { internalNote: a.reason ?? undefined })],
         notifications: [sms(d.sender.phone, 'booking_cancelled', d.trackingNumber, `${deps.site.companyName}: booking ${d.trackingNumber} has been cancelled.${paid ? ' Any payment will be refunded.' : ''}`)],
-        audit: [...audit, ...(paid ? [{ actorUid: deps.actor.uid, actorRole: deps.actor.role, action: 'refund.required', targetType: 'deliveryRequest', targetId: d.trackingNumber, after: { reason: 'cancelled after payment' } }] : [])],
+        ...(creditRelease ? { creditRelease } : {}),
+        audit: [
+          ...audit,
+          ...(paid ? [{ actorUid: deps.actor.uid, actorRole: deps.actor.role, action: 'refund.required', targetType: 'deliveryRequest', targetId: d.trackingNumber, after: { reason: 'cancelled after payment' } }] : []),
+          ...(b.invoiceId ? [{ actorUid: deps.actor.uid, actorRole: deps.actor.role, action: 'invoice.adjustment_required', targetType: 'invoice', targetId: b.invoiceId, after: { trackingNumber: d.trackingNumber } }] : []),
+        ],
       };
     }
     case 'hold': {

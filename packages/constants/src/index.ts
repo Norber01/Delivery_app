@@ -173,6 +173,20 @@ export const MAX_MANIFEST_PARCELS = 150;
 export const HUB_SCAN_TYPES = ['receive', 'handover'] as const;
 export type HubScanType = (typeof HUB_SCAN_TYPES)[number];
 
+export const BUSINESS_VERIFICATION_STATUSES = ['pending', 'verified', 'rejected', 'suspended'] as const;
+export type BusinessVerificationStatus = (typeof BUSINESS_VERIFICATION_STATUSES)[number];
+
+export const INVOICE_STATUSES = ['issued', 'partially_paid', 'paid', 'overdue', 'void'] as const;
+export type InvoiceStatus = (typeof INVOICE_STATUSES)[number];
+
+export const INVOICE_PAYMENT_METHODS = ['bank_transfer', 'mobile_money', 'cheque', 'cash'] as const;
+export type InvoicePaymentMethod = (typeof INVOICE_PAYMENT_METHODS)[number];
+
+/** Bulk booking limits (rows per CSV batch; batch previews expire). */
+export const BULK = { maxRows: 200, previewTtlMinutes: 60, maxAddressBook: 2000, maxStaff: 50 } as const;
+/** Max bookings per invoice document (larger months are split into parts). */
+export const MAX_INVOICE_LINES = 400;
+
 /** POD OTP rules. */
 export const POD_OTP = { digits: 6, maxAttempts: 5, ttlHours: 48 } as const;
 /** POD captured further than this from the destination is flagged for review. */
@@ -265,6 +279,8 @@ export const COLLECTIONS = {
   podSecrets: 'podSecrets',
   driverActions: 'driverActions',
   uploads: 'uploads',
+  bulkBatches: 'bulkBatches',
+  counters: 'counters',
 } as const;
 
 /** Stable error codes returned by functions (in `details.code`) so clients can show precise messages. */
@@ -314,5 +330,11 @@ export const ERROR_CODES = [
   'ALREADY_ON_MANIFEST',
   'ROUTE_MISMATCH',
   'NOT_FOUND',
+  'BUSINESS_NOT_VERIFIED',
+  'CREDIT_LIMIT_EXCEEDED',
+  'INVOICES_OVERDUE',
+  'ALREADY_REGISTERED',
+  'ACCOUNT_EXISTS',
+  'BATCH_EXPIRED',
 ] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number];

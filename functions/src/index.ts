@@ -48,6 +48,14 @@ import {
 } from './ops/opsService.js';
 import { fromDoc } from './store/firestoreStore.js';
 import * as hubService from './ops/hubService.js';
+import * as businessService from './business/businessService.js';
+import * as bulkService from './business/bulkService.js';
+import * as invoiceService from './business/invoiceService.js';
+import { FirestoreBusinessStore } from './business/firestoreBusiness.js';
+import type { BusinessIdentityPort } from './business/types.js';
+import type { BusinessDeps } from './business/businessService.js';
+import type { BulkDeps } from './business/bulkService.js';
+import type { InvoiceDeps } from './business/invoiceService.js';
 
 initializeApp();
 setGlobalOptions({ region: FIREBASE_REGION, maxInstances: 20 });
@@ -344,3 +352,76 @@ export const createManifest = callable([UPLOAD_SIGNING_SECRET], (req) => hubServ
 export const addToManifest = callable([UPLOAD_SIGNING_SECRET], (req) => hubService.manifestParcel(opsDeps(), callerFromToken(req.auth), req.data, 'add'));
 export const removeFromManifest = callable([UPLOAD_SIGNING_SECRET], (req) => hubService.manifestParcel(opsDeps(), callerFromToken(req.auth), req.data, 'remove'));
 export const manifestAction = callable([UPLOAD_SIGNING_SECRET], (req) => hubService.manifestAction(opsDeps(), callerFromToken(req.auth), req.data));
+
+// ---- Business accounts, bulk booking and invoices (Phase 5) -----------------------------------
+
+const bizStore = new FirestoreBusinessStore(db);
+
+const businessIdentity: BusinessIdentityPort = {
+  getClaims: async (uid) => (await getAuth().getUser(uid)).customClaims ?? {},
+  async setClaims(uid, claims) {
+    await getAuth().setCustomUserClaims(uid, claims);
+    await db.collection('users').doc(uid).set({ uid, role: claims.role, businessId: claims.businessId ?? null, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+  },
+  revokeSessions: (uid) => getAuth().revokeRefreshTokens(uid),
+  async createUserWithSetupLink(p) {
+    const auth = getAuth();
+    try {
+      await auth.getUserByEmail(p.email);
+      return 'exists';
+    } catch {
+      /* not found: create */
+    }
+    const user = await auth.createUser({ email: p.email, displayName: p.name, emailVerified: false });
+    return { uid: user.uid, setupLink: await auth.generatePasswordResetLink(p.email) };
+  },
+};
+
+function businessDeps(): BusinessDeps {
+  const o = opsDeps();
+  return { biz: bizStore, ops: opsStore, evidence: o.evidence, identity: businessIdentity, uploads: o.uploads, now: () => new Date(), newId: () => randomId(12) };
+}
+const bulkDeps = (): BulkDeps => ({ store, biz: bizStore, rateLimiter, maps: deps().maps, now: () => new Date(), newId: () => randomId(12), site: site() });
+const invoiceDeps = (): InvoiceDeps => ({ biz: bizStore, now: () => new Date(), newId: () => randomId(12) });
+
+export const requestBusinessDocumentUpload = callable([UPLOAD_SIGNING_SECRET], (req) => businessService.requestBusinessDocumentUpload(businessDeps(), callerFromToken(req.auth), req.data));
+export const registerBusiness = callable([UPLOAD_SIGNING_SECRET], (req) => businessService.registerBusiness(businessDeps(), callerFromToken(req.auth), req.data));
+export const reviewBusiness = callable([UPLOAD_SIGNING_SECRET], (req) => businessService.reviewBusiness(businessDeps(), callerFromToken(req.auth), req.data));
+export const setCreditTerms = callable([UPLOAD_SIGNING_SECRET], (req) => businessService.setCreditTerms(businessDeps(), callerFromToken(req.auth), req.data));
+export const setContractPricing = callable([UPLOAD_SIGNING_SECRET], (req) => businessService.setContractPricing(businessDeps(), callerFromToken(req.auth), req.data));
+export const inviteBusinessStaff = callable([UPLOAD_SIGNING_SECRET], (req) => businessService.inviteStaff(businessDeps(), callerFromToken(req.auth), req.data));
+export const removeBusinessStaff = callable([UPLOAD_SIGNING_SECRET], (req) => businessService.removeStaff(businessDeps(), callerFromToken(req.auth), req.data));
+export const saveAddressEntry = callable([UPLOAD_SIGNING_SECRET], (req) => businessService.saveAddressEntry(businessDeps(), callerFromToken(req.auth), req.data));
+export const deleteAddressEntry = callable([UPLOAD_SIGNING_SECRET], (req) => businessService.deleteAddressEntry(businessDeps(), callerFromToken(req.auth), req.data));
+
+/** CSV bulk upload: server-side validation, geocoding and pricing (up to 200 rows). */
+export const previewBulkBooking = onCall({ enforceAppCheck: true, secrets: [IP_HASH_SALT, MAPBOX_SERVER_TOKEN], memory: '512MiB', timeoutSeconds: 300 }, async (req) => {
+  try {
+    return await bulkService.previewBulkBooking(bulkDeps(), callerFromToken(req.auth), req.data);
+  } catch (e) {
+    throw toHttpsError(e);
+  }
+});
+export const confirmBulkBooking = onCall({ enforceAppCheck: true, secrets: [IP_HASH_SALT, MAPBOX_SERVER_TOKEN], memory: '512MiB', timeoutSeconds: 300 }, async (req) => {
+  try {
+    return await bulkService.confirmBulkBooking(bulkDeps(), callerFromToken(req.auth), req.data);
+  } catch (e) {
+    throw toHttpsError(e);
+  }
+});
+
+export const generateInvoices = callable([], (req) => invoiceService.generateInvoices(invoiceDeps(), callerFromToken(req.auth), req.data));
+export const recordInvoicePayment = callable([], (req) => invoiceService.recordInvoicePayment(invoiceDeps(), callerFromToken(req.auth), req.data));
+export const voidInvoice = callable([], (req) => invoiceService.voidInvoice(invoiceDeps(), callerFromToken(req.auth), req.data));
+export const getBusinessReport = callable([], (req) => invoiceService.getBusinessReport(invoiceDeps(), callerFromToken(req.auth), req.data));
+
+/** 02:13 Accra time on the 1st: invoice last month's account bookings. */
+export const monthlyInvoiceRun = onSchedule({ schedule: '13 2 1 * *', timeZone: 'Africa/Accra', timeoutSeconds: 540 }, async () => {
+  const d = invoiceDeps();
+  console.log('Invoices', await invoiceService.generateInvoices(d, 'system', { period: invoiceService.previousPeriod(d.now()) }));
+});
+
+/** Daily: mark unpaid invoices past due; overdue businesses cannot book on account. */
+export const markOverdueInvoices = onSchedule({ schedule: '37 6 * * *', timeZone: 'Africa/Accra' }, async () => {
+  console.log('Overdue', await invoiceService.markOverdueInvoices(invoiceDeps()));
+});

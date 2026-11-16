@@ -224,7 +224,10 @@ export async function requestUpload(deps: OpsDeps, caller: Caller, raw: unknown)
 export async function getEvidenceUrl(deps: OpsDeps, caller: Caller, raw: unknown): Promise<{ url: string }> {
   requireRole(caller, ['dispatcher', 'finance', 'admin', 'super_admin']);
   const key = typeof (raw as { key?: unknown })?.key === 'string' ? (raw as { key: string }).key : '';
-  if (!/^pod\/[A-Za-z0-9_-]{1,64}\/[A-Za-z0-9_-]{8,64}\.(jpg|png|webp)$/.test(key)) throw new AppError('VALIDATION_FAILED', 'Invalid key.', 'invalid-argument');
+  const pod = /^pod\/[A-Za-z0-9_-]{1,64}\/[A-Za-z0-9_-]{8,64}\.(jpg|png|webp)$/.test(key);
+  // Business registration documents are visible to admin/finance only.
+  const kyb = /^kyb\/[A-Za-z0-9_-]{1,64}\/[A-Za-z0-9_-]{8,64}\.(jpg|png|webp|pdf)$/.test(key) && caller.role !== 'dispatcher';
+  if (!pod && !kyb) throw new AppError('VALIDATION_FAILED', 'Invalid key.', 'invalid-argument');
   const expires = Math.floor(deps.now().getTime() / 1000) + 5 * 60;
   return { url: await evidenceUrl(deps.uploads.workerUrl, deps.uploads.secret, { method: 'GET', key, expires }) };
 }

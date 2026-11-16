@@ -429,6 +429,112 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "deliveryRequests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "businessId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "paymentPreference",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "invoiceId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "deliveryRequests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "businessId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "invoices",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "businessId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "issuedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "invoices",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "businessId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "invoices",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dueAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "invoices",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "issuedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "sellers",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "verificationStatus",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "legalName",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": [
@@ -485,6 +591,16 @@
     {
       "collectionGroup": "proofOfDelivery",
       "fieldPath": "signature",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "bulkBatches",
+      "fieldPath": "rows",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "invoices",
+      "fieldPath": "lines",
       "indexes": []
     }
   ]

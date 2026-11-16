@@ -53,7 +53,8 @@ export function normalizeQuery(q: string): string {
   return q.normalize('NFKC').trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
-const EVIDENCE_KEY = /^pod\/[A-Za-z0-9_-]{1,64}\/[A-Za-z0-9_-]{8,64}\.(jpg|png|webp)$/;
+// POD photos and business registration documents (PDF allowed for documents only).
+const EVIDENCE_KEY = /^(pod\/[A-Za-z0-9_-]{1,64}\/[A-Za-z0-9_-]{8,64}\.(jpg|png|webp)|kyb\/[A-Za-z0-9_-]{1,64}\/[A-Za-z0-9_-]{8,64}\.(jpg|png|webp|pdf))$/;
 
 /**
  * Proof-of-delivery photos in a private R2 bucket. Every request needs a short-lived URL signed
@@ -76,7 +77,14 @@ async function handleEvidence(req: Request, url: URL, env: Env, nowSeconds: numb
     const obj = await env.EVIDENCE.get(key);
     if (!obj) return json({ error: 'not_found' }, 404);
     return new Response(obj.body, {
-      headers: { 'Content-Type': obj.httpMetadata?.contentType ?? 'application/octet-stream', 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' },
+      headers: {
+        'Content-Type': obj.httpMetadata?.contentType ?? 'application/octet-stream',
+        'Cache-Control': 'private, no-store',
+        'X-Content-Type-Options': 'nosniff',
+        // Never render uploaded files as active content on our origin.
+        'Content-Security-Policy': "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; plugin-types application/pdf; sandbox",
+        'Content-Disposition': 'inline',
+      },
     });
   }
   // PUT

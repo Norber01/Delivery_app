@@ -1,6 +1,7 @@
 import type { ContractTerms, DeliveryRequestDoc, PricingRuleSet, ServiceArea } from '@courier/shared-types';
 import type {
   AuditEntry,
+  CreateBookingExtras,
   BookingRecord,
   BusinessAccount,
   CreateBookingOutcome,
@@ -50,7 +51,10 @@ export class MemoryStore implements Store {
     return this.contracts.get(id) ?? null;
   }
   async getBusiness(id: string) {
-    return this.businesses.get(id) ?? null;
+    const legacy = this.businesses.get(id);
+    if (legacy) return legacy;
+    const s = this.sellers.get(id);
+    return s ? { id, verificationStatus: s.verificationStatus as never, creditApproved: Boolean(s.creditTerms) } : null;
   }
   async saveQuote(q: StoredQuote) {
     if (this.quotes.has(q.id)) throw new Error('exists');
@@ -60,18 +64,22 @@ export class MemoryStore implements Store {
     const q = this.quotes.get(id);
     return q ? structuredClone(q) : null;
   }
-  async createBooking(
-    b: DeliveryRequestDoc,
-    quoteId: string,
-    audit: AuditEntry,
-    extras: { events?: TrackingEventRecord[]; notifications?: NewNotification[] } = {},
-  ): Promise<CreateBookingOutcome> {
-    const q = this.quotes.get(quoteId);
-    if (!q) return 'quote_not_found';
-    if (q.usedByTrackingNumber) return 'quote_already_used';
+  sellers = new Map<string, { verificationStatus: string; creditTerms: { limitPesewas: number } | null; creditUsedPesewas: number; hasOverdueInvoices: boolean }>();
+  batchCreated = new Map<string, Record<string, string>>();
+  async createBooking(b: DeliveryRequestDoc, quoteId: string | null, audit: AuditEntry, extras: CreateBookingExtras = {}): Promise<CreateBookingOutcome> {
+    const q = quoteId ? this.quotes.get(quoteId) : null;
+    if (quoteId && !q) return 'quote_not_found';
+    if (q?.usedByTrackingNumber) return 'quote_already_used';
+    if (extras.batchRow && this.batchCreated.get(extras.batchRow.batchId)?.[String(extras.batchRow.index)]) return 'row_already_created';
     if (this.bookings.has(b.trackingNumber)) return 'tracking_number_taken';
+    if (b.paymentPreference === 'business_invoice' && b.businessId) {
+      const sd = this.sellers.get(b.businessId);
+      if (!sd || sd.verificationStatus !== 'verified' || !sd.creditTerms || sd.hasOverdueInvoices || sd.creditUsedPesewas + b.price.totalPesewas > sd.creditTerms.limitPesewas) return 'credit_refused';
+      sd.creditUsedPesewas += b.price.totalPesewas;
+    }
     this.bookings.set(b.trackingNumber, structuredClone({ ...b, createdAt: this.now(), updatedAt: this.now() }));
-    q.usedByTrackingNumber = b.trackingNumber;
+    if (q) q.usedByTrackingNumber = b.trackingNumber;
+    if (extras.batchRow) this.batchCreated.set(extras.batchRow.batchId, { ...(this.batchCreated.get(extras.batchRow.batchId) ?? {}), [String(extras.batchRow.index)]: b.trackingNumber });
     this.audit.push(audit);
     this.events.push(...(extras.events ?? []));
     for (const n of extras.notifications ?? []) await this.queueNotification(n);

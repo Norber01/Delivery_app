@@ -23,6 +23,11 @@ export interface PricingInput {
   urgency: Urgency;
   specialHandling: readonly SpecialHandling[];
   contract?: ContractTerms | null;
+  /**
+   * Item count used to pick the bulk-discount tier. Bulk bookings pass the whole batch's item
+   * count so every parcel in a large upload gets the batch tier.
+   */
+  bulkQuantity?: number;
 }
 
 const VEHICLE_LABEL: Record<VehicleClass, string> = {
@@ -180,8 +185,9 @@ export function priceShipment(rules: PricingRuleSet, input: PricingInput): Price
   }
 
   // 7. Discounts (on transport + weight only), combined percentage capped.
+  const tierQuantity = Math.max(totalQuantity, input.bulkQuantity ?? 0);
   const bulkPercent = rules.bulkDiscounts
-    .filter((t) => t.minPackages <= totalQuantity)
+    .filter((t) => t.minPackages <= tierQuantity)
     .reduce((m, t) => Math.max(m, t.percent), 0);
   const cap = rules.maxDiscountPercent;
   const appliedBulk = Math.min(bulkPercent, cap);
