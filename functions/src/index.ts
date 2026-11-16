@@ -116,7 +116,10 @@ function deps(): ServiceDeps {
 }
 
 let paystack: PaystackProvider | null = null;
+const paymentsConfigured = () => configured(PAYSTACK_SECRET_KEY.value());
 function paymentDeps(): PaymentDeps {
+  // Until a Paystack key is added, online payment is off (the website hides it too).
+  if (!paymentsConfigured()) throw new AppError('PAYMENT_PROVIDER_ERROR', 'Online payment is not available yet. Please choose to pay the driver.');
   paystack ??= new PaystackProvider(PAYSTACK_SECRET_KEY.value());
   return { store, rateLimiter, provider: paystack, now: () => new Date(), site: site() };
 }
@@ -151,14 +154,18 @@ export const getQuote = callable([MAPBOX_SERVER_TOKEN], (req) =>
 );
 
 /** Turn a quote into a booking. Open to guests (App Check + rate limit). */
-export const createBooking = callable([], (req) =>
-  createBookingService(
+export const createBooking = callable([PAYSTACK_SECRET_KEY], (req) => {
+  const pref = (req.data as { paymentPreference?: unknown })?.paymentPreference;
+  if ((pref === 'mobile_money' || pref === 'card') && !paymentsConfigured()) {
+    throw new AppError('PAYMENT_METHOD_NOT_ALLOWED', 'Online payment is not available yet. Please choose to pay the driver at pickup.');
+  }
+  return createBookingService(
     { store, rateLimiter, now: () => new Date(), site: site() },
     req.data,
     callerFromToken(req.auth),
     meta(req),
-  ),
-);
+  );
+});
 
 /** Publish a new pricing version (admin, MFA). */
 export const publishPricingRules = callable([], (req) => publishPricingRulesService(store, callerFromToken(req.auth), req.data));
@@ -223,6 +230,7 @@ export const paystackWebhook = onRequest({ secrets: [PAYSTACK_SECRET_KEY], memor
 export const reconcilePayments = onSchedule(
   { schedule: 'every 15 minutes', secrets: [PAYSTACK_SECRET_KEY], timeoutSeconds: 300 },
   async () => {
+    if (!paymentsConfigured()) return;
     const d = paymentDeps();
     const payments = await reconcilePaymentsService(d);
     const refunds = await reconcileRefunds(d);

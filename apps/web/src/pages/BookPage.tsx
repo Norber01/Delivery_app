@@ -13,6 +13,7 @@ import { ApiError, QUOTE_INVALIDATING_CODES } from '../lib/errors';
 import { contactToInput, draftToQuoteRequest, initialDraft, type BookingDraft, type ContactDraft } from '../lib/draft';
 import { PayButton } from '../components/PayButton';
 import { useAuth } from '../lib/auth';
+import { config } from '../lib/config';
 import { canBookOnAccount, useBusiness } from '../lib/useBusiness';
 import { rememberAccess, trackLink } from '../lib/guestAccess';
 import { useSavedAddresses } from '../lib/useSavedAddresses';
@@ -324,7 +325,7 @@ export function BookPage() {
           <fieldset className="card space-y-3">
             <legend className="px-1 font-semibold">Payment</legend>
             {[
-              ...PAYMENT_OPTIONS,
+              ...PAYMENT_OPTIONS.filter((o) => config.onlinePayments || o.value === 'cash_on_pickup'),
               ...(canBookOnAccount(business)
                 ? [{ value: 'business_invoice' as const, label: 'Business account — monthly invoice', hint: `Added to ${business!.tradingName}'s invoice for this month. Uses your approved credit.` }]
                 : []),

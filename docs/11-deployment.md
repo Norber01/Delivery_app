@@ -1,5 +1,7 @@
 # 11. Setup & Deployment
 
+> **Recommended path:** the GitHub Actions workflows in `.github/workflows/` automate sections 11.3–11.5 (project set-up, secrets, deploys, driver app builds) and can be run from a phone — see [13-phone-setup.md](13-phone-setup.md). The manual commands below remain for reference and local development.
+
 ## 11.1 Prerequisites
 - Node.js 22, pnpm 10 (`corepack enable`)
 - Firebase CLI (`pnpm dlx firebase-tools@15 …` or a global install) and Java 21+ for emulators

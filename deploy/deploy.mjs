@@ -59,7 +59,7 @@ async function main() {
     const services = [
       'cloudresourcemanager', 'serviceusage', 'iam', 'firestore', 'firebasedatabase', 'firebaserules', 'identitytoolkit',
       'cloudfunctions', 'cloudbuild', 'artifactregistry', 'run', 'eventarc', 'pubsub', 'cloudscheduler', 'secretmanager',
-      'firebaseappcheck', 'recaptchaenterprise', 'firebaseinstallations', 'storage', 'logging',
+      'firebaseappcheck', 'recaptchaenterprise', 'firebaseinstallations', 'firebaseappdistribution', 'storage', 'logging',
     ].map((s) => `${s}.googleapis.com`);
     const r = await gcp('POST', `https://serviceusage.googleapis.com/v1/projects/${P}/services:batchEnable`, { serviceIds: services });
     if (r.status !== 200) {
@@ -355,6 +355,7 @@ async function main() {
       VITE_SUPPORT_PHONE: cfg.supportPhone,
       VITE_MAPBOX_PUBLIC_TOKEN: env.MAPBOX_PUBLIC_TOKEN || '',
       VITE_USE_EMULATORS: 'false',
+      VITE_ONLINE_PAYMENTS: cfg.paystack ? 'true' : 'false',
     };
     const envFile = Object.entries(vite).map(([k, v]) => `${k}=${JSON.stringify(String(v ?? ''))}`).join('\n') + '\n';
     const edgeOrigin = new URL(urls.edge).origin;

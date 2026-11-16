@@ -1,8 +1,9 @@
 # Builds the driver app for Android on GitHub's computers. From your phone:
-# GitHub → Actions → Driver app (Android) → Run workflow. When it finishes, open the run and
-# download the app from the release it links to (also listed under the repository's Releases).
-#   phones       an .apk to install directly on drivers' phones
-#   google-play  an .aab to upload to Google Play (internal testing), see docs/13-phone-setup.md
+# GitHub → Actions → Driver app (Android) → Run workflow.
+#   phones       an .apk sent privately to the drivers listed in DRIVER_TESTERS through Firebase
+#                App Distribution (each gets an email with an install link)
+#   google-play  an .aab to upload to Google Play (internal testing), downloadable from the run
+# See docs/13-phone-setup.md.
 name: Driver app (Android)
 
 on:
@@ -24,7 +25,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write # saves the encrypted signing key on the first build and publishes the release
+  contents: read
 
 jobs:
   build:
@@ -36,12 +37,12 @@ jobs:
       DEPLOY_ENV: ${{ inputs.environment }}
       DISTRIBUTION: ${{ inputs.distribution }}
       GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
-      DRIVER_SIGNING_PASSWORD: ${{ secrets.DRIVER_SIGNING_PASSWORD }}
       COMPANY_NAME: ${{ vars.COMPANY_NAME }}
       SUPPORT_PHONE: ${{ vars.SUPPORT_PHONE }}
       DISPATCH_PHONE: ${{ vars.DISPATCH_PHONE }}
       ANDROID_PACKAGE: ${{ vars.ANDROID_PACKAGE }}
       PLAY_APP_SIGNING_SHA256: ${{ vars.PLAY_APP_SIGNING_SHA256 }}
+      DRIVER_TESTERS: ${{ vars.DRIVER_TESTERS }}
     steps:
       - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v4
@@ -87,7 +88,7 @@ jobs:
             cp bundle/release/app-release.aab "$RUNNER_TEMP/out/$name.aab"
             if [ "${{ steps.signing.outputs.signed }}" = "true" ]; then
               zip -q -d "$RUNNER_TEMP/out/$name.aab" 'META-INF/*' || true
-              jarsigner -keystore "${{ steps.signing.outputs.keystore }}" -storepass:env DRIVER_SIGNING_PASSWORD -keypass:env DRIVER_SIGNING_PASSWORD \
+              jarsigner -keystore "${{ steps.signing.outputs.keystore }}" -storepass:env KS_PW -keypass:env KS_PW \
                 -sigalg SHA256withRSA -digestalg SHA-256 "$RUNNER_TEMP/out/$name.aab" upload
             fi
             echo "file=$RUNNER_TEMP/out/$name.aab" >> "$GITHUB_OUTPUT"
@@ -95,7 +96,7 @@ jobs:
             if [ "${{ steps.signing.outputs.signed }}" = "true" ]; then
               tools="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
               "$tools/apksigner" sign --ks "${{ steps.signing.outputs.keystore }}" --ks-key-alias upload \
-                --ks-pass env:DRIVER_SIGNING_PASSWORD --key-pass env:DRIVER_SIGNING_PASSWORD \
+                --ks-pass env:KS_PW --key-pass env:KS_PW \
                 --out "$RUNNER_TEMP/out/$name.apk" apk/release/app-release.apk
               "$tools/apksigner" verify "$RUNNER_TEMP/out/$name.apk"
             else
@@ -104,18 +105,22 @@ jobs:
             echo "file=$RUNNER_TEMP/out/$name.apk" >> "$GITHUB_OUTPUT"
           fi
           rm -f "${{ steps.signing.outputs.keystore }}"
+      # Public repositories: the APK carries an App Check token, so it is never attached to the
+      # run; it goes privately to drivers. App bundles for Google Play hold nothing secret.
       - uses: actions/upload-artifact@v4
+        if: inputs.distribution == 'google-play' || steps.prepare.outputs.kind == 'test' || github.event.repository.private
         with:
           name: driver-app-${{ inputs.environment }}-${{ github.run_number }}
           path: ${{ steps.sign.outputs.file }}
-          retention-days: 30
-      - name: Publish a release (easy download on a phone)
-        if: steps.prepare.outputs.kind != 'test'
-        env:
-          GH_TOKEN: ${{ github.token }}
+          retention-days: 14
+      - name: Send to drivers (Firebase App Distribution)
+        if: inputs.distribution == 'phones' && steps.prepare.outputs.kind == 'real'
         run: |
-          tag="driver-${{ inputs.environment }}-${{ github.run_number }}"
-          gh release create "$tag" "${{ steps.sign.outputs.file }}" --target "${{ github.sha }}" --prerelease \
-            --title "Driver app — ${{ inputs.environment }} build ${{ github.run_number }} (${{ inputs.distribution }})" \
-            --notes "Built from ${{ github.sha }}. ${{ inputs.distribution == 'google-play' && 'Upload the .aab in Google Play Console (Testing → Internal testing → Create release).' || 'Install on drivers phones (allow installing from this source when asked).' }}"
-          echo "📦 Download: ${{ github.server_url }}/${{ github.repository }}/releases/tag/$tag" >> "$GITHUB_STEP_SUMMARY"
+          if [ -z "$DRIVER_TESTERS" ]; then
+            echo "⚠️ Add the variable **DRIVER_TESTERS** (drivers' emails, comma-separated) to send the app to drivers; this build was uploaded to Firebase App Distribution without inviting anyone." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          pnpm exec firebase appdistribution:distribute "${{ steps.sign.outputs.file }}" \
+            --app "${{ steps.prepare.outputs.android_app }}" --project "${{ steps.prepare.outputs.project }}" \
+            ${DRIVER_TESTERS:+--testers "$DRIVER_TESTERS"} \
+            --release-notes "Build ${{ github.run_number }} from ${{ github.sha }}"
+          echo "📲 Sent through Firebase App Distribution. Drivers open the invitation email on their phone and tap **Download**. New testers: add them to DRIVER_TESTERS and run this again." >> "$GITHUB_STEP_SUMMARY"

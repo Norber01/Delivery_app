@@ -14,5 +14,6 @@
 | 10 | [Security plan](10-security.md) | Identity, data protection, app security, audit, backup & recovery |
 | 11 | [Setup & deployment](11-deployment.md) | Local development, project setup, deployment, rollback |
 | 12 | [Cost control](12-cost-control.md) | Free tiers, usage controls, budget alerts |
+| 13 | [Phone setup guide](13-phone-setup.md) | Set up and deploy everything from a phone browser via GitHub Actions |
 
 Screenshots of the booking, payment, tracking, account, dispatch, fleet and proof-of-delivery flows (Phases 1–3) are in [`screenshots/`](screenshots/).

@@ -2,7 +2,7 @@
  * Driver app build helpers for .github/workflows/driver-app.yml.
  *
  *   node deploy/driver-app.mjs prepare   Firebase config, app version, package name (+ App Check token)
- *   node deploy/driver-app.mjs signing   decrypt the signing key, or create it on the first build
+ *   node deploy/driver-app.mjs signing   fetch the signing key from Secret Manager (created on the first build)
  *
  * DISTRIBUTION=phones: an APK installed directly on drivers' phones. Play Integrity cannot vouch
  *   for such installs, so the build carries its own App Check debug token, registered here and
@@ -12,8 +12,8 @@
  * Without GCP_SA_KEY the build is a TEST build with placeholder settings (it proves the app
  * compiles; it cannot connect to anything).
  */
-import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { randomBytes, randomUUID } from 'node:crypto';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { env, gcp, run, stop, StopError, summary, waitOp } from './lib.mjs';
 
@@ -21,7 +21,6 @@ const ROOT = new URL('..', import.meta.url).pathname;
 const APP = join(ROOT, 'apps/driver-app');
 const FB = 'https://firebase.googleapis.com/v1beta1';
 const TMP = env.RUNNER_TEMP || '/tmp';
-const KEY_ENC = join(APP, 'signing/upload-key.jks.enc');
 const PLAY = env.DISTRIBUTION === 'google-play';
 const out = (k, v) => env.GITHUB_OUTPUT && writeFileSync(env.GITHUB_OUTPUT, `${k}=${v}\n`, { flag: 'a' });
 
@@ -120,46 +119,52 @@ async function addSha(project, appId, sha) {
 }
 
 /**
- * The signing key never leaves GitHub unencrypted: it is generated on the first build, encrypted
- * with DRIVER_SIGNING_PASSWORD (AES-256, PBKDF2) and committed; later builds decrypt it. Every
- * update must be signed with the same key, so keep the password in a password manager.
+ * The upload/signing key lives in the project's Google Secret Manager (DRIVER_UPLOAD_KEYSTORE and
+ * DRIVER_UPLOAD_KEY_PASSWORD), created on the first real build. It is never stored in the
+ * repository or in build logs, and every later build reuses it so updates install over the
+ * previous version. Test builds (no GCP_SA_KEY) use Android's throw-away debug key.
  */
 async function signing() {
-  const pw = env.DRIVER_SIGNING_PASSWORD || '';
-  if (!pw) {
-    out('signed', 'false');
-    summary('⚠️ **DRIVER_SIGNING_PASSWORD** is not set, so the app is signed with a throw-away test key. Add the secret before giving the app to drivers (phones cannot update between differently signed builds).');
-    return;
-  }
-  if (pw.length < 20) stop('DRIVER_SIGNING_PASSWORD is too short', ['Use at least 20 characters (a passphrase of 4–5 random words is fine) and keep it in a password manager.']);
-  const ks = join(TMP, 'upload.jks');
-  if (existsSync(KEY_ENC)) {
-    const r = run('openssl', ['enc', '-d', '-aes-256-cbc', '-pbkdf2', '-iter', '200000', '-in', KEY_ENC, '-out', ks, '-pass', 'env:DRIVER_SIGNING_PASSWORD'], { allowFail: true, quiet: true });
-    if (!r.ok) stop('Wrong DRIVER_SIGNING_PASSWORD', ['The signing key in the repository was created with a different password. Enter the original password; if it is lost, delete `apps/driver-app/signing/upload-key.jks.enc` and drivers must uninstall the old app once.']);
-  } else {
-    run('keytool', ['-genkeypair', '-keystore', ks, '-storetype', 'PKCS12', '-alias', 'upload', '-keyalg', 'RSA', '-keysize', '3072', '-validity', '10000', '-storepass:env', 'DRIVER_SIGNING_PASSWORD', '-keypass:env', 'DRIVER_SIGNING_PASSWORD', '-dname', `CN=${(env.COMPANY_NAME || 'Courier').replace(/[,=+<>#;"\\]/g, ' ')} driver app`], { quiet: true });
-    mkdirSync(join(APP, 'signing'), { recursive: true });
-    run('openssl', ['enc', '-aes-256-cbc', '-pbkdf2', '-iter', '200000', '-salt', '-in', ks, '-out', KEY_ENC, '-pass', 'env:DRIVER_SIGNING_PASSWORD'], { quiet: true });
-    run('git', ['config', 'user.name', 'github-actions[bot]']);
-    run('git', ['config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com']);
-    run('git', ['add', KEY_ENC]);
-    run('git', ['commit', '-m', 'Add the encrypted driver app signing key (created by the build workflow)']);
-    const push = run('git', ['push', 'origin', `HEAD:${env.GITHUB_REF_NAME}`], { allowFail: true });
-    if (!push.ok) summary('⚠️ Could not save the new signing key to the repository (branch protected?). This build is fine, but the next one would get a different key — allow GitHub Actions to push, or ask for help.');
-    else summary('🔑 Created the app signing key and saved it (encrypted) in `apps/driver-app/signing/`.');
-  }
-  const info = run('keytool', ['-list', '-v', '-keystore', ks, '-storepass:env', 'DRIVER_SIGNING_PASSWORD'], { quiet: true });
-  const sha = /SHA256:\s*([0-9A-F:]+)/.exec(info)?.[1] ?? '';
-  out('signed', 'true');
-  out('keystore', ks);
-  summary(`Signing certificate SHA-256: \`${sha}\``);
   let project = null;
   try {
     project = JSON.parse(env.GCP_SA_KEY || '').project_id;
   } catch {
     /* test build */
   }
-  if (project && env.ANDROID_APP_ID) await addSha(project, env.ANDROID_APP_ID, sha);
+  if (!project) {
+    out('signed', 'false');
+    return;
+  }
+  const sm = `https://secretmanager.googleapis.com/v1/projects/${project}/secrets`;
+  const read = async (name) => {
+    const r = await gcp('GET', `${sm}/${name}/versions/latest:access`);
+    return r.status === 200 ? Buffer.from(r.body.payload.data, 'base64') : null;
+  };
+  const save = async (name, data) => {
+    const c = await gcp('POST', `${sm}?secretId=${name}`, { replication: { automatic: {} }, labels: { purpose: 'driver-app-signing' } });
+    if (c.status !== 200 && c.status !== 409) throw new Error(`Secret Manager: ${JSON.stringify(c.body).slice(0, 200)}`);
+    const v = await gcp('POST', `${sm}/${name}:addVersion`, { payload: { data: data.toString('base64') } });
+    if (v.status !== 200) throw new Error(`Secret Manager: ${JSON.stringify(v.body).slice(0, 200)}`);
+  };
+  const ks = join(TMP, 'upload.p12');
+  let store = await read('DRIVER_UPLOAD_KEYSTORE');
+  let password = (await read('DRIVER_UPLOAD_KEY_PASSWORD'))?.toString('utf8');
+  if (!store || !password) {
+    password = randomBytes(24).toString('base64url');
+    run('keytool', ['-genkeypair', '-keystore', ks, '-storetype', 'PKCS12', '-alias', 'upload', '-keyalg', 'RSA', '-keysize', '3072', '-validity', '10000', '-storepass:env', 'KS_PW', '-keypass:env', 'KS_PW', '-dname', `CN=${(env.COMPANY_NAME || 'Courier').replace(/[,=+<>#;"\\]/g, ' ')} driver app`], { quiet: true, env: { KS_PW: password } });
+    store = readFileSync(ks);
+    await save('DRIVER_UPLOAD_KEY_PASSWORD', Buffer.from(password));
+    await save('DRIVER_UPLOAD_KEYSTORE', store);
+    summary('🔑 Created the app signing key and stored it in your Google project (Secret Manager → DRIVER_UPLOAD_KEYSTORE). Do not delete it: every update must be signed with it.');
+  } else writeFileSync(ks, store);
+  console.log(`::add-mask::${password}`);
+  if (env.GITHUB_ENV) writeFileSync(env.GITHUB_ENV, `KS_PW=${password}\n`, { flag: 'a' });
+  const info = run('keytool', ['-list', '-v', '-keystore', ks, '-storepass:env', 'KS_PW'], { quiet: true, env: { KS_PW: password } });
+  const sha = /SHA256:\s*([0-9A-F:]+)/.exec(info)?.[1] ?? '';
+  out('signed', 'true');
+  out('keystore', ks);
+  summary(`Signing certificate SHA-256: \`${sha}\``);
+  if (env.ANDROID_APP_ID) await addSha(project, env.ANDROID_APP_ID, sha);
 }
 
 const cmd = process.argv[2];
