@@ -39,13 +39,16 @@ export class MemoryBusinessStore implements BusinessStore {
     Object.assign(this.store.sellers.get(id)!, clone(patch));
     if (audit) this.store.audit.push(audit);
   }
-  async addStaff(id: string, uid: string) {
+  async addStaff(id: string, uid: string, info: { name: string; email: string }) {
     const b = this.store.sellers.get(id) as unknown as BusinessDoc;
     if (!b.staffUids.includes(uid)) b.staffUids.push(uid);
+    b.staffDirectory = { ...b.staffDirectory, [uid]: info };
   }
   async removeStaff(id: string, uid: string) {
     const b = this.store.sellers.get(id) as unknown as BusinessDoc;
     b.staffUids = b.staffUids.filter((x) => x !== uid);
+    const { [uid]: _gone, ...rest } = b.staffDirectory;
+    b.staffDirectory = rest;
   }
   async setContract(c: { businessId: string; discountPercent: number }) {
     this.contracts.push(c);

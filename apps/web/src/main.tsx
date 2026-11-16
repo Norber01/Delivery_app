@@ -14,6 +14,19 @@ const page = (load: () => Promise<{ default: React.ComponentType }>) => async ()
 const lazyPage = <K extends string>(load: () => Promise<Record<K, React.ComponentType>>, name: K) =>
   page(async () => ({ default: (await load())[name] }));
 
+/** Lazy page that requires a signed-in account. */
+const authed = <K extends string>(load: () => Promise<Record<K, React.ComponentType>>, name: K) =>
+  page(async () => {
+    const C: React.ComponentType = (await load())[name];
+    return {
+      default: () => (
+        <RequireAuth>
+          <C />
+        </RequireAuth>
+      ),
+    };
+  });
+
 const router = createBrowserRouter([
   {
     element: <Layout />,
@@ -28,6 +41,10 @@ const router = createBrowserRouter([
       { path: '/receipt/:tn', lazy: lazyPage(() => import('./pages/ReceiptPage'), 'ReceiptPage') },
       { path: '/label/:tn', lazy: lazyPage(() => import('./pages/LabelPage'), 'LabelPage') },
       { path: '/signin', lazy: lazyPage(() => import('./pages/SignInPage'), 'SignInPage') },
+      { path: '/business', lazy: authed(() => import('./pages/business/BusinessPage'), 'BusinessPage') },
+      { path: '/business/register', lazy: authed(() => import('./pages/BusinessRegisterPage'), 'BusinessRegisterPage') },
+      { path: '/business/labels', lazy: authed(() => import('./pages/business/BulkLabelsPage'), 'BulkLabelsPage') },
+      { path: '/business/invoices/:id', lazy: authed(() => import('./pages/business/InvoicePage'), 'InvoicePage') },
       {
         path: '/account',
         lazy: page(async () => {

@@ -38,11 +38,11 @@ export class FirestoreBusinessStore implements BusinessStore {
     if (audit) this.audit(batch, audit);
     await batch.commit();
   }
-  async addStaff(id: string, uid: string) {
-    await this.col('sellers').doc(id).update({ staffUids: FieldValue.arrayUnion(uid) });
+  async addStaff(id: string, uid: string, info: { name: string; email: string }) {
+    await this.col('sellers').doc(id).update({ staffUids: FieldValue.arrayUnion(uid), [`staffDirectory.${uid}`]: info });
   }
   async removeStaff(id: string, uid: string) {
-    await this.col('sellers').doc(id).update({ staffUids: FieldValue.arrayRemove(uid) });
+    await this.col('sellers').doc(id).update({ staffUids: FieldValue.arrayRemove(uid), [`staffDirectory.${uid}`]: FieldValue.delete() });
   }
   async setContract(c: { businessId: string; discountPercent: number; validFrom: Date; validTo: Date; approvedBy: string }) {
     await this.col('contractPricing').add({ ...c, validFrom: Timestamp.fromDate(c.validFrom), validTo: Timestamp.fromDate(c.validTo), createdAt: FieldValue.serverTimestamp() });

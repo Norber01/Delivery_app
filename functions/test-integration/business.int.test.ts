@@ -30,7 +30,7 @@ const row = (ref: string) => ({ reference: ref, recipient_name: 'Kofi Boateng', 
 async function seedBusiness(limitPesewas: number) {
   const b: BusinessDoc = {
     id: 'biz1', legalName: 'Ama Styles Limited', tradingName: 'Ama Styles', registrationNumber: 'CS1', tin: 'C0012345678',
-    contact: { name: 'Ama', phone: '+233241234567' }, billingAddress: addr, pickupAddress: addr, ownerUid: 'ama', staffUids: [],
+    contact: { name: 'Ama', phone: '+233241234567' }, billingAddress: addr, pickupAddress: addr, ownerUid: 'ama', staffUids: [], staffDirectory: {},
     verificationStatus: 'verified', verificationNote: null, documentKeys: [],
     creditTerms: { limitPesewas, termDays: 30, approvedBy: 'fin', approvedAt: '2026-11-01T00:00:00Z' },
     creditUsedPesewas: 0, hasOverdueInvoices: false, contractDiscountPercent: 0,

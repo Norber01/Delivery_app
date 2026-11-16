@@ -84,6 +84,7 @@ export async function registerBusiness(deps: BusinessDeps, caller: Caller, raw: 
     ...input,
     ownerUid: caller.uid,
     staffUids: [],
+    staffDirectory: {},
     verificationStatus: 'pending',
     verificationNote: null,
     creditTerms: null,
@@ -154,7 +155,7 @@ export async function inviteStaff(deps: BusinessDeps, caller: Caller, raw: unkno
     throw new AppError('ACCOUNT_EXISTS', 'That email already has an account. Use a work email that is not yet registered.');
   }
   await deps.identity.setClaims(created.uid, { role: 'business_staff', businessId: b.id });
-  await deps.biz.addStaff(b.id, created.uid);
+  await deps.biz.addStaff(b.id, created.uid, { name: input.name, email: input.email });
   return created;
 }
 

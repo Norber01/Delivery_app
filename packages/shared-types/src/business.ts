@@ -26,6 +26,8 @@ export interface BusinessDoc {
   pickupAddress: Address;
   ownerUid: string;
   staffUids: string[];
+  /** Display info for staff (owners cannot read other users' profiles). */
+  staffDirectory: Record<string, { name: string; email: string }>;
   verificationStatus: BusinessVerificationStatus;
   verificationNote: string | null;
   /** R2 keys of registration documents (certificate, TIN). */

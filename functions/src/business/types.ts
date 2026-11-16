@@ -27,7 +27,7 @@ export interface BusinessStore {
   /** Creates the business unless the owner already has one. */
   createBusiness(b: BusinessDoc): Promise<'created' | 'owner_has_business'>;
   updateBusiness(id: string, patch: Partial<BusinessDoc>, audit?: AuditEntry): Promise<void>;
-  addStaff(id: string, uid: string): Promise<void>;
+  addStaff(id: string, uid: string, info: { name: string; email: string }): Promise<void>;
   removeStaff(id: string, uid: string): Promise<void>;
   setContract(c: { businessId: string; discountPercent: number; validFrom: Date; validTo: Date; approvedBy: string }): Promise<void>;
 

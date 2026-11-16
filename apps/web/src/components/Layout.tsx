@@ -20,6 +20,11 @@ export function Layout() {
             <NavLink to="/track" className={nav}>
               Track
             </NavLink>
+            {(role === 'business_owner' || role === 'business_staff') && (
+              <NavLink to="/business" className={nav}>
+                Business
+              </NavLink>
+            )}
             <NavLink to={user && role ? '/account' : '/signin'} className={nav}>
               {user && role ? 'My account' : 'Sign in'}
             </NavLink>

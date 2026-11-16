@@ -151,6 +151,7 @@ describe('staff and address book', () => {
     const { uid, setupLink } = await inviteStaff(bdeps, owner, { name: 'Efua Ansah', email: 'efua@styles.gh' });
     expect(setupLink).toContain('oobCode');
     expect(identity.claims.get(uid)).toEqual({ role: 'business_staff', businessId: owner.businessId });
+    expect((await biz.getBusiness(owner.businessId!))!.staffDirectory[uid]).toEqual({ name: 'Efua Ansah', email: 'efua@styles.gh' });
     const staff: Caller = { uid, role: 'business_staff', businessId: owner.businessId, mfa: false };
     await expectCode(inviteStaff(bdeps, staff, { name: 'X Y', email: 'x@styles.gh' }), 'PERMISSION_DENIED');
     await expectCode(inviteStaff(bdeps, owner, { name: 'Efua Ansah', email: 'efua@styles.gh' }), 'ACCOUNT_EXISTS');

@@ -82,6 +82,9 @@ export function AccountPage() {
         </div>
       </div>
       {error && <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
+      <Link to="/business/register" className="card block text-sm hover:border-brand-500">
+        <span className="font-semibold text-brand-700">Sell online or ship for a company?</span> Open a business account for bulk uploads, staff logins, reports and monthly invoicing →
+      </Link>
 
       <section className="space-y-3">
         <h2 className="text-xl font-semibold">My bookings</h2>

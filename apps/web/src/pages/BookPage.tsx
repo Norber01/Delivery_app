@@ -13,6 +13,7 @@ import { ApiError, QUOTE_INVALIDATING_CODES } from '../lib/errors';
 import { contactToInput, draftToQuoteRequest, initialDraft, type BookingDraft, type ContactDraft } from '../lib/draft';
 import { PayButton } from '../components/PayButton';
 import { useAuth } from '../lib/auth';
+import { canBookOnAccount, useBusiness } from '../lib/useBusiness';
 import { rememberAccess, trackLink } from '../lib/guestAccess';
 import { useSavedAddresses } from '../lib/useSavedAddresses';
 
@@ -62,6 +63,7 @@ interface Quoted {
 const keyOf = (r: QuoteRequestInput) => JSON.stringify(r);
 
 export function BookPage() {
+  const { business } = useBusiness();
   const [step, setStep] = useState<Step>('route');
   const [draft, setDraft] = useState<BookingDraft>(initialDraft);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -321,7 +323,12 @@ export function BookPage() {
 
           <fieldset className="card space-y-3">
             <legend className="px-1 font-semibold">Payment</legend>
-            {PAYMENT_OPTIONS.map((o) => (
+            {[
+              ...PAYMENT_OPTIONS,
+              ...(canBookOnAccount(business)
+                ? [{ value: 'business_invoice' as const, label: 'Business account — monthly invoice', hint: `Added to ${business!.tradingName}'s invoice for this month. Uses your approved credit.` }]
+                : []),
+            ].map((o) => (
               <label
                 key={o.value}
                 className={`flex cursor-pointer gap-3 rounded-lg border p-3 text-sm ${draft.paymentPreference === o.value ? 'border-brand-600 bg-brand-50' : 'border-slate-200'}`}
