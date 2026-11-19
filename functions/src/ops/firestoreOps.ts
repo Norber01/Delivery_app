@@ -27,7 +27,11 @@ export const DRIVER_BUSY_STATUSES = ['assigned', 'en_route_to_pickup', 'picked_u
 const TERMINAL = ['delivered', 'returned', 'cancelled'];
 
 export class FirestoreOpsStore implements OpsStore {
-  constructor(private readonly db: Firestore) {}
+  /** `clock` is the transaction time (server time in production; the demo's sample data runs in the past). */
+  constructor(
+    private readonly db: Firestore,
+    private readonly clock: () => Date = () => new Date(),
+  ) {}
 
   private col(name: keyof typeof COLLECTIONS) {
     return this.db.collection(COLLECTIONS[name]);
@@ -85,7 +89,7 @@ export class FirestoreOpsStore implements OpsStore {
         podSecret: pSnap.exists ? fromDoc<PodSecret>(pSnap.data()!) : null,
         driver: drSnap?.exists ? (drSnap.data() as DriverDoc) : null,
         manifest: mSnap?.exists ? (mSnap.data() as ManifestDoc) : null,
-        now: new Date(),
+        now: this.clock(),
       };
       const m = decide(ctx);
       if (m.manifestReceived && manifestRef) tx.update(manifestRef, { receivedIds: FieldValue.arrayUnion(m.manifestReceived) });
@@ -158,7 +162,7 @@ export class FirestoreOpsStore implements OpsStore {
       const vehicle = vSnap.data() as VehicleDoc | undefined;
       if (!driver || driver.status !== 'active') return { ok: false as const, code: 'DRIVER_UNAVAILABLE' as const };
       if (!vehicle) return { ok: false as const, code: 'VEHICLE_UNAVAILABLE' as const };
-      const now = Date.now();
+      const now = this.clock().getTime();
       const current = driver.currentShift;
       const active = current && new Date(current.activeUntil).getTime() > now;
       if (active && current.vehicleId === vehicleId) return { ok: true as const, shift: current };
@@ -247,7 +251,7 @@ export class FirestoreOpsStore implements OpsStore {
         deliveries: deliveries.filter((d) => d.exists).map((d) => fromDoc<DeliveryRecord>(d.data()!)),
         driver: driver.exists ? (driver.data() as DriverDoc) : null,
         route: route.exists ? (route.data() as RouteDoc) : null,
-        now: new Date(),
+        now: this.clock(),
       });
       if (m.manifest) tx.update(mRef, { ...m.manifest, updatedAt: FieldValue.serverTimestamp() });
       for (const u of m.deliveries ?? []) tx.update(this.col('deliveries').doc(u.id), { ...u.patch, updatedAt: FieldValue.serverTimestamp() });

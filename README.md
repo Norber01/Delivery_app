@@ -2,6 +2,10 @@
 
 Monorepo for a company-operated courier service in Ghana: own vehicles, own drivers, own hubs, one central dispatch team. Customers (individuals, online sellers, businesses) book directly.
 
+## Try the demo (no accounts needed)
+
+A card-free demo of the whole platform runs in the browser on GitHub Pages — see [docs/14-demo.md](docs/14-demo.md) (enable Pages once, then **Actions → Demo site**).
+
 ## Setting up
 
 **From a phone, no computer needed:** follow [docs/13-phone-setup.md](docs/13-phone-setup.md). GitHub Actions does the building and deploying (**Deploy**, **Admin tasks**, **Driver app (Android)** workflows); you fill in a few settings.

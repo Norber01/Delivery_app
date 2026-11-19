@@ -1,0 +1,54 @@
+# Publishes the card-free demo (website + ops app with sample data, no Firebase/Cloudflare/cards)
+# to GitHub Pages: https://<owner>.github.io/<repository>/
+# One-time: GitHub → Settings → Pages → Build and deployment → Source: "GitHub Actions".
+name: Demo site
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: demo-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build the demo
+        env:
+          DEMO_BASE: /${{ github.event.repository.name }}/
+          DEMO_COMPANY_NAME: ${{ vars.DEMO_COMPANY_NAME }}
+          DEMO_SUPPORT_PHONE: ${{ vars.DEMO_SUPPORT_PHONE }}
+        run: deploy/build-demo.sh
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: demo-dist
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
+      - name: Summary
+        run: |
+          echo "### Demo published" >> "$GITHUB_STEP_SUMMARY"
+          echo "Website: ${{ steps.deployment.outputs.page_url }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Ops app: ${{ steps.deployment.outputs.page_url }}ops/" >> "$GITHUB_STEP_SUMMARY"

@@ -61,7 +61,10 @@ const router = createBrowserRouter([
       { path: '*', element: <NotFoundPage /> },
     ],
   },
-]);
+], { basename: import.meta.env.BASE_URL.replace(/\/$/, '') || '/' });
+
+// Demo build: start the in-browser backend straight away (shows the demo bar on every page).
+if (import.meta.env.VITE_DEMO === 'true') void import('@courier/demo-backend').then((m) => m.demoReady());
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

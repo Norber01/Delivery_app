@@ -10,7 +10,7 @@ export function ErrorPage() {
       <p className="mb-6 text-slate-600">
         Please reload the page and try again.{config.supportPhone && ` If the problem continues, call us on ${config.supportPhone}.`}
       </p>
-      <a href="/" className="btn-primary">
+      <a href={import.meta.env.BASE_URL} className="btn-primary">
         Reload
       </a>
     </div>

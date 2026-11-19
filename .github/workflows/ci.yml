@@ -43,3 +43,5 @@ jobs:
           pnpm --filter @courier/functions build
           pnpm --filter @courier/web build
           pnpm --filter @courier/admin-tools build
+      - name: Build the card-free demo
+        run: DEMO_BASE=/demo/ DEMO_OUT=$RUNNER_TEMP/demo deploy/build-demo.sh

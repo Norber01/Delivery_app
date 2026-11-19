@@ -1,0 +1,29 @@
+{
+  "name": "@courier/demo-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/runtime/index.ts",
+  "types": "src/runtime/index.ts",
+  "exports": {
+    ".": "./src/runtime/index.ts",
+    "./vite": "./vite.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@courier/constants": "workspace:*",
+    "@courier/shared-types": "workspace:*",
+    "@courier/shared-utils": "workspace:*",
+    "@courier/validation": "workspace:*",
+    "@noble/hashes": "1.8.0",
+    "buffer": "6.0.3",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "vite": "^8.3.7"
+  }
+}

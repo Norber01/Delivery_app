@@ -10,6 +10,9 @@ import { RoutesPage } from './pages/RoutesPage';
 import { ExpensesPage } from './pages/ExpensesPage';
 import { DriverPayPage } from './pages/DriverPayPage';
 import { AnalyticsPage } from './pages/AnalyticsPage';
+import { DriverDemoPage } from './pages/DriverDemoPage';
+
+const DEMO = import.meta.env.VITE_DEMO === 'true';
 import { HubPage } from './pages/HubPage';
 import { NetworkPage } from './pages/NetworkPage';
 import { config } from './lib/config';
@@ -49,6 +52,7 @@ function Shell() {
           {canManageExpenses(role) && <NavLink to="/expenses" className={link}>Expenses</NavLink>}
           {canManageInvoices(role) && <NavLink to="/driver-pay" className={link}>Driver pay</NavLink>}
           {canManageInvoices(role) && <NavLink to="/analytics" className={link}>Analytics</NavLink>}
+          {DEMO && <NavLink to="/driver-demo" className={link}>Driver phone (demo)</NavLink>}
         </nav>
         <span className="ml-auto hidden text-sm text-slate-500 sm:inline">
           {user.email} · {role}
@@ -85,6 +89,7 @@ const router = createBrowserRouter([
       { path: '/fleet', element: <Guard allow={canManageFleet}><FleetPage /></Guard> },
       { path: '/hub', element: <Guard allow={canOperateHubs}><HubPage /></Guard> },
       { path: '/network', element: <Guard allow={canManageNetwork}><NetworkPage /></Guard> },
+      ...(DEMO ? [{ path: '/driver-demo', element: <DriverDemoPage /> }] : []),
       { path: '/routes', element: <Guard allow={canDispatch}><RoutesPage /></Guard> },
       { path: '/expenses', element: <Guard allow={canManageExpenses}><ExpensesPage /></Guard> },
       { path: '/driver-pay', element: <Guard allow={canManageInvoices}><DriverPayPage /></Guard> },
@@ -95,7 +100,10 @@ const router = createBrowserRouter([
       { path: '*', element: <Navigate to="/" replace /> },
     ],
   },
-]);
+], { basename: import.meta.env.BASE_URL.replace(/\/$/, '') || '/' });
+
+// Demo build: start the in-browser backend straight away (shows the demo bar on every page).
+if (import.meta.env.VITE_DEMO === 'true') void import('@courier/demo-backend').then((m) => m.demoReady());
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
