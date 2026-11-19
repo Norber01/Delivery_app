@@ -38,3 +38,25 @@ export function navigationUrl(p: { lat: number; lng: number }, platform: 'androi
 export function newActionId(randomBytes: (n: number) => Uint8Array): string {
   return [...randomBytes(16)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
+
+/**
+ * Jobs in the order of the route plan (Phase 6): each job's position is its next planned stop.
+ * Jobs the plan does not know (assigned after planning) follow in the usual order.
+ */
+export function orderByPlan<T extends Pick<DeliveryDoc, 'id' | 'status' | 'expectedDeliveryAt'>>(
+  jobs: T[],
+  plan: { stops: { deliveryId: string; seq: number; kind: 'pickup' | 'drop' }[] } | null,
+): { job: T; stop: number | null }[] {
+  const first = new Map<string, number>();
+  for (const s of plan?.stops ?? []) if (!first.has(s.deliveryId)) first.set(s.deliveryId, s.seq);
+  const planned = jobs.filter((j) => first.has(j.id)).sort((a, b) => first.get(a.id)! - first.get(b.id)!);
+  const rest = sortJobs(jobs.filter((j) => !first.has(j.id)));
+  return [...planned.map((job) => ({ job, stop: first.get(job.id)! })), ...rest.map((job) => ({ job, stop: null }))];
+}
+
+/** Parse an odometer reading typed by a driver ("12 345", "12,345") to whole km, or an error. */
+export function parseOdometer(text: string): { km: number } | { error: string } {
+  const clean = text.replace(/[\s,]/g, '');
+  if (!/^\d{1,7}$/.test(clean)) return { error: 'Enter the odometer reading in kilometres (numbers only).' };
+  return { km: Number(clean) };
+}

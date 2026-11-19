@@ -1,4 +1,4 @@
-import type { DeliveryDoc, DriverDoc, ManifestDoc, VehicleDoc } from '@courier/shared-types';
+import type { DeliveryDoc, DriverCashLedger, DriverDoc, DriverPayRules, DriverPayStatement, ManifestDoc, RoutePlanDoc, VehicleDoc } from '@courier/shared-types';
 import { collection, doc, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import type { QueueSnapshot } from '../core/queue';
@@ -64,4 +64,29 @@ export function useManifests(uid: string) {
     [uid],
   );
   return manifests;
+}
+
+/** The latest route plan for this driver (made by dispatch or by the driver). */
+export function useRoutePlan(uid: string) {
+  const [plan, setPlan] = useState<RoutePlanDoc | null>(null);
+  useEffect(() => onSnapshot(doc(db, 'routePlans', uid), (s) => setPlan(s.exists() ? (s.data() as RoutePlanDoc) : null), () => setPlan(null)), [uid]);
+  return plan;
+}
+
+/** Pay statements (newest first), cash still held, and the pay rates. */
+export function usePay(uid: string) {
+  const [statements, setStatements] = useState<DriverPayStatement[]>([]);
+  const [cash, setCash] = useState<DriverCashLedger | null>(null);
+  const [rules, setRules] = useState<DriverPayRules | null>(null);
+  useEffect(() => {
+    const a = onSnapshot(query(collection(db, 'driverPayments'), where('driverUid', '==', uid), orderBy('period', 'desc'), limit(6)), (s) => setStatements(s.docs.map((d) => d.data() as DriverPayStatement)), () => setStatements([]));
+    const b = onSnapshot(doc(db, 'driverCash', uid), (s) => setCash(s.exists() ? (s.data() as DriverCashLedger) : null), () => setCash(null));
+    const c = onSnapshot(doc(db, 'config', 'driverPay'), (s) => setRules(s.exists() ? (s.data() as DriverPayRules) : null), () => setRules(null));
+    return () => {
+      a();
+      b();
+      c();
+    };
+  }, [uid]);
+  return { statements, cash, rules };
 }

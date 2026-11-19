@@ -6,6 +6,8 @@ import { ActivityIndicator, AppState, SafeAreaView, View } from 'react-native';
 import { colors, Notice, s } from './src/components/ui';
 import { JobScreen } from './src/screens/JobScreen';
 import { JobsScreen } from './src/screens/JobsScreen';
+import { FuelScreen } from './src/screens/FuelScreen';
+import { PayScreen } from './src/screens/PayScreen';
 import { ShiftScreen } from './src/screens/ShiftScreen';
 import { SignInScreen } from './src/screens/SignInScreen';
 import { auth } from './src/services/firebase';
@@ -43,6 +45,7 @@ function Signed({ uid }: { uid: string }) {
   const driver = useDriver(uid);
   const jobs = useJobs(uid);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [view, setView] = useState<'jobs' | 'fuel' | 'pay'>('jobs');
   const onShift = Boolean(driver?.currentShift && new Date(driver.currentShift.activeUntil) > new Date());
 
   // Keep the GPS service in step with the server-side shift (e.g. after a restart or expiry).
@@ -60,8 +63,10 @@ function Signed({ uid }: { uid: string }) {
       </View>
     );
   }
-  if (!onShift) return <ShiftScreen driver={driver} onSignOut={() => void signOut(auth)} />;
+  if (view === 'pay') return <PayScreen uid={uid} onBack={() => setView('jobs')} />;
+  if (!onShift) return <ShiftScreen driver={driver} onSignOut={() => void signOut(auth)} onPay={() => setView('pay')} />;
+  if (view === 'fuel') return <FuelScreen onBack={() => setView('jobs')} />;
   const open: DeliveryDoc | undefined = jobs.find((j) => j.id === openId);
   if (open) return <JobScreen job={open} onBack={() => setOpenId(null)} />;
-  return <JobsScreen driver={driver} onOpen={(d) => setOpenId(d.id)} />;
+  return <JobsScreen driver={driver} onOpen={(d) => setOpenId(d.id)} onFuel={() => setView('fuel')} onPay={() => setView('pay')} />;
 }

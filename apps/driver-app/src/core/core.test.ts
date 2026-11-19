@@ -147,3 +147,21 @@ describe('jobs & signatures', () => {
     expect(s[1]).toEqual([[1, 0]]);
   });
 });
+
+describe('route plan order and odometer', () => {
+  const job = (id: string, status: 'assigned' | 'out_for_delivery', due: string) => ({ id, status, expectedDeliveryAt: due });
+  it('follows the plan and puts unplanned jobs after it', async () => {
+    const { orderByPlan } = await import('./jobs');
+    const jobs = [job('A', 'assigned', '2026-11-19T12:00:00Z'), job('B', 'out_for_delivery', '2026-11-19T11:00:00Z'), job('C', 'assigned', '2026-11-19T10:00:00Z')];
+    const plan = { stops: [{ deliveryId: 'B', seq: 1, kind: 'drop' as const }, { deliveryId: 'A', seq: 2, kind: 'pickup' as const }, { deliveryId: 'A', seq: 3, kind: 'drop' as const }] };
+    expect(orderByPlan(jobs, plan).map((x) => `${x.job.id}:${x.stop}`)).toEqual(['B:1', 'A:2', 'C:null']);
+    expect(orderByPlan(jobs, null).map((x) => x.job.id)).toEqual(['B', 'C', 'A']);
+  });
+  it('reads odometer readings typed with spaces or commas', async () => {
+    const { parseOdometer } = await import('./jobs');
+    expect(parseOdometer('12 345')).toEqual({ km: 12345 });
+    expect(parseOdometer('12,345')).toEqual({ km: 12345 });
+    expect(parseOdometer('12.5')).toHaveProperty('error');
+    expect(parseOdometer('')).toHaveProperty('error');
+  });
+});

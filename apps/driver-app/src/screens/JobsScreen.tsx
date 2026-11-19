@@ -2,16 +2,22 @@ import type { DeliveryDoc, DriverDoc } from '@courier/shared-types';
 import { PUBLIC_STATUS_LABELS } from '@courier/shared-utils';
 import { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
-import { nextStep, sortJobs } from '../core/jobs';
-import { Button, Card, Notice, s } from '../components/ui';
+import { nextStep, orderByPlan, parseOdometer } from '../core/jobs';
+import { Button, Card, Field, Notice, s } from '../components/ui';
 import { api } from '../services/api';
-import { useHistory, useJobs, useManifests, useQueue } from '../services/hooks';
+import { useHistory, useJobs, useManifests, useQueue, useRoutePlan } from '../services/hooks';
 import { stopShiftTracking } from '../services/location';
 import { actionQueue } from '../services/queue';
 import { shiftStore } from '../services/storage';
 
-export function JobsScreen({ driver, onOpen }: { driver: DriverDoc; onOpen: (d: DeliveryDoc) => void }) {
-  const jobs = sortJobs(useJobs(driver.uid));
+export function JobsScreen({ driver, onOpen, onFuel, onPay }: { driver: DriverDoc; onOpen: (d: DeliveryDoc) => void; onFuel: () => void; onPay: () => void }) {
+  const plan = useRoutePlan(driver.uid);
+  const ordered = orderByPlan(useJobs(driver.uid), plan);
+  const jobs = ordered.map((o) => o.job);
+  const stopOf = new Map(ordered.map((o) => [o.job.id, o.stop]));
+  const [planning, setPlanning] = useState(false);
+  const [ending, setEnding] = useState(false);
+  const [odometer, setOdometer] = useState('');
   const [tab, setTab] = useState<'current' | 'history'>('current');
   const history = useHistory(driver.uid, tab === 'history');
   const queue = useQueue();
@@ -40,6 +46,35 @@ export function JobsScreen({ driver, onOpen }: { driver: DriverDoc; onOpen: (d: 
         </Pressable>
       ))}
       <View style={s.row}>
+        <Button title="Log fuel" tone="secondary" onPress={onFuel} />
+        <Button title="My pay" tone="secondary" onPress={onPay} />
+      </View>
+      {tab === 'current' && jobs.length > 1 && (
+        <Card>
+          <Text style={s.text}>
+            {plan && plan.stops.length
+              ? `Planned order: ${plan.stops.length} stops, about ${plan.travelMinutes} min driving${plan.lateStops ? ` · ${plan.lateStops} may be late` : ''}.`
+              : 'Get the best order for your stops.'}
+          </Text>
+          <Button
+            title={plan ? 'Re-plan my route' : 'Plan my route'}
+            tone="secondary"
+            busy={planning}
+            onPress={async () => {
+              setPlanning(true);
+              setError(null);
+              try {
+                await api.planMyRoute();
+              } catch (e) {
+                setError((e as Error).message);
+              } finally {
+                setPlanning(false);
+              }
+            }}
+          />
+        </Card>
+      )}
+      <View style={s.row}>
         <Button title={`Current (${jobs.length})`} tone={tab === 'current' ? 'primary' : 'secondary'} onPress={() => setTab('current')} />
         <Button title="History" tone={tab === 'history' ? 'primary' : 'secondary'} onPress={() => setTab('history')} />
       </View>
@@ -64,6 +99,7 @@ export function JobsScreen({ driver, onOpen }: { driver: DriverDoc; onOpen: (d: 
         <Pressable key={d.id} onPress={() => onOpen(d)} accessibilityRole="button">
           <Card>
             <View style={s.row}>
+              {tab === 'current' && stopOf.get(d.id) != null && <Text style={{ color: '#fff', backgroundColor: '#15803d', borderRadius: 12, minWidth: 24, textAlign: 'center', fontWeight: '700', marginRight: 8 }}>{stopOf.get(d.id)}</Text>}
               <Text style={[s.h2, { flex: 1 }]}>{PUBLIC_STATUS_LABELS[d.status]}</Text>
               {d.urgency !== 'standard' && <Text style={{ color: '#1d4ed8', fontWeight: '700' }}>{d.urgency.replace('_', ' ').toUpperCase()}</Text>}
             </View>
@@ -75,15 +111,19 @@ export function JobsScreen({ driver, onOpen }: { driver: DriverDoc; onOpen: (d: 
         </Pressable>
       ))}
       {error && <Notice tone="error">{error}</Notice>}
+      {ending && <Field label="Odometer reading now (km)" keyboardType="number-pad" value={odometer} onChangeText={setOdometer} placeholder="e.g. 12400" />}
       <Button
-        title="End shift"
+        title={ending ? 'Confirm end of shift' : 'End shift'}
         tone="danger"
         busy={busy}
         onPress={async () => {
+          if (!ending) return setEnding(true);
           setBusy(true);
           setError(null);
           try {
-            await api.endShift();
+            const odo = parseOdometer(odometer);
+            if ('error' in odo) throw new Error(odo.error);
+            await api.endShift(odo.km);
             await stopShiftTracking();
             await shiftStore.clear();
           } catch (e) {
