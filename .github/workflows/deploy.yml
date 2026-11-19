@@ -50,6 +50,7 @@ jobs:
       WEB_URL: ${{ vars.WEB_URL }}
       OPS_URL: ${{ vars.OPS_URL }}
       EDGE_URL: ${{ vars.EDGE_URL }}
+      BIGQUERY_EXPORT: ${{ vars.BIGQUERY_EXPORT }}
     steps:
       - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v4

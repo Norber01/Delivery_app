@@ -176,6 +176,18 @@ complete most deliveries, so turn SMS on before real deliveries start.
 2. Copy the SMS API **Client ID** and **Client Secret** into `HUBTEL_SMS_CLIENT_ID` and
    `HUBTEL_SMS_CLIENT_SECRET`, then run **Deploy** (**backend**).
 
+## 9b. Fleet, expenses, driver pay and reports (Phase 6)
+
+All in the ops app; nothing to set up outside it.
+
+1. **Vehicles** — Fleet → Vehicle care → *Manage*: service interval (km or days), insurance and roadworthy expiry dates. A vehicle with expired papers cannot start a shift.
+2. **Pay rates** — Driver pay → *Pay rates* (per day worked, per job, per intercity trip). Drivers see them in the app.
+3. **Each month** — Driver pay → *Prepare statements* for last month → check, add bonuses/deductions → *Approve* → pay by MoMo/bank → *Mark paid* with the reference.
+4. **Cash** — Driver pay → *Cash held by drivers*: record each hand-in when a driver gives you the cash they collected.
+5. **Expenses** — fleet, hub and finance staff record costs with a receipt photo; another finance user approves them.
+6. **Reports** — Analytics → choose the month. All six checks should show ✔; a ✖ names what does not add up.
+7. **Optional BigQuery** — add the variable `BIGQUERY_EXPORT` = `on` and run **Deploy** (backend). A daily export then fills the `courier_analytics` dataset for Looker Studio or SQL.
+
 ## 10. Production
 
 Repeat sections 1–3 with a second Firebase project (e.g. `swiftcourier-prod`) and a GitHub

@@ -17,8 +17,8 @@ pnpm test:rules                # Firestore + RTDB security rules against the emu
 pnpm --filter @courier/functions test:integration   # FirestoreStore + services against the Firestore emulator
 # Browser E2E (Playwright, no cloud accounts): start emulators, harness and both apps in one go
 functions/test-integration/e2e-up.sh            # logs in /tmp/courier-e2e; `e2e-up.sh stop` to stop
-(cd functions && FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 node test-integration/e2e-seed-users.mjs)
-(cd functions && node test-integration/e2e-phase5.cjs /tmp/courier-e2e)   # also e2e-browser.cjs (1–2), e2e-phase3.cjs, e2e-phase4.cjs (see headers)
+(cd functions && FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 node test-integration/e2e-seed-users.mjs)
+(cd functions && node test-integration/e2e-phase6.cjs /tmp/courier-e2e)   # also e2e-browser.cjs (1–2), e2e-phase3/4/5.cjs (see headers)
 pnpm --filter @courier/admin-tools dev    # ops app on http://localhost:5174
 pnpm --filter @courier/driver-app test    # driver-app core logic (the app itself needs an Android device/emulator)
 
@@ -127,3 +127,5 @@ wrangler deploy --env production
 - Pages/Worker: Cloudflare dashboard → rollback to previous deployment.
 
 **Business accounts (Phase 5)** — no new secrets. Deploy adds the business callables and two schedules: `monthlyInvoiceRun` (02:13 Accra on the 1st, invoices the previous month) and `markOverdueInvoices` (daily 06:37). Deploy the new Firestore indexes (`firebase deploy --only firestore:indexes`) before the functions, or the invoice and report queries fail. Registration documents land in the same R2 bucket under `kyb/` (images or PDF up to 8 MB; served inline with a sandboxing CSP). Before go-live: give at least one admin the verification duty and one `finance` user the credit/invoice duty (`setUserRole`), add the company's bank and MoMo collection details to the invoice footer text (`apps/web/src/pages/business/InvoicePage.tsx`), and confirm with the company accountant how VAT/levies must appear on invoices.
+
+**Fleet, driver pay and analytics (Phase 6)** — no new secrets or accounts. Deploy adds the Phase 6 callables, the daily `exportAnalytics` schedule (does nothing unless the `BIGQUERY_EXPORT` parameter is `on`) and new Firestore indexes (deploy indexes before functions). Receipts are stored in the same R2 bucket under `receipt/`. The BigQuery dataset `courier_analytics` (europe-west1) and its tables are created by the first export; the functions' runtime service account needs BigQuery Data Editor and Job User (the default compute service account's Editor role covers both). Before go-live: set driver pay rates (ops app → Driver pay → Pay rates) and confirm with your accountant whether statements must show statutory deductions.

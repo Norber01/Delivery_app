@@ -44,6 +44,10 @@ import { handleRefundEvent } from '../src/services/refundService.js';
 import { getTrackingView } from '../src/services/trackingService.js';
 import { FirestoreRateLimiter, FirestoreStore } from '../src/store/firestoreStore.js';
 import { setUserRole } from '../src/services/adminService.js';
+import { FirestoreFleetStore } from '../src/fleet/firestoreFleet.js';
+import * as fleet from '../src/fleet/fleetService.js';
+import { getFinanceReport } from '../src/fleet/financeService.js';
+import { planDriverRoute } from '../src/fleet/routeService.js';
 import { verifyUploadToken } from '@courier/shared-utils';
 import * as businessService from '../src/business/businessService.js';
 import * as bulkService from '../src/business/bulkService.js';
@@ -78,6 +82,9 @@ const opsDeps: OpsDeps = {
   site,
   uploads: { workerUrl: 'http://127.0.0.1:8788', secret: UPLOAD_SECRET },
 };
+const fleetStore = new FirestoreFleetStore(db, opsStore);
+opsDeps.fleet = fleetStore;
+const fleetDeps = { fleet: fleetStore, evidence: opsDeps.evidence, uploads: opsDeps.uploads, now: () => new Date(), newId: () => randomId(12) };
 const bizStore = new FirestoreBusinessStore(db);
 const businessIdentity: BusinessIdentityPort = {
   getClaims: async (uid) => (await auth.getUser(uid)).customClaims ?? {},
@@ -146,7 +153,7 @@ createServer(async (req, res) => {
       dispatchAction: () => dispatchAction(opsDeps, caller, data),
       driverAction: () => driverAction(opsDeps, caller, data),
       startShift: () => startShift(opsDeps, caller, data),
-      endShift: () => endShift(opsDeps, caller),
+      endShift: () => endShift(opsDeps, caller, data),
       requestUpload: () => requestUpload(opsDeps, caller, data),
       getEvidenceUrl: () => getEvidenceUrl(opsDeps, caller, data),
       upsertVehicle: () => upsertVehicle({ ops: opsStore }, caller, data),
@@ -192,6 +199,20 @@ createServer(async (req, res) => {
           caller,
           data,
         ),
+      planDriverRoute: () => planDriverRoute({ fleet: fleetStore, live, now: () => new Date() }, caller, data),
+      setVehicleSchedule: () => fleet.setVehicleSchedule(fleetDeps, caller, data),
+      recordMaintenance: () => fleet.recordMaintenance(fleetDeps, caller, data),
+      requestReceiptUpload: () => fleet.requestReceiptUpload(fleetDeps, caller, data),
+      logFuel: () => fleet.logFuel(fleetDeps, caller, data),
+      submitExpense: () => fleet.submitExpense(fleetDeps, caller, data),
+      reviewExpense: () => fleet.reviewExpense(fleetDeps, caller, data),
+      setDriverPayRules: () => fleet.setPayRules(fleetDeps, caller, data),
+      generateDriverPay: () => fleet.generateDriverPay(fleetDeps, caller, data),
+      adjustDriverPay: () => fleet.adjustDriverPay(fleetDeps, caller, data),
+      approveDriverPay: () => fleet.approveDriverPay(fleetDeps, caller, data),
+      markDriverPaid: () => fleet.markDriverPaid(fleetDeps, caller, data),
+      recordCashRemittance: () => fleet.recordCashRemittance(fleetDeps, caller, data),
+      getFinanceReport: () => getFinanceReport({ fleet: fleetStore, now: () => new Date() }, caller, data),
       requestBusinessDocumentUpload: () => businessService.requestBusinessDocumentUpload(businessDeps, caller, data),
       registerBusiness: () => businessService.registerBusiness(businessDeps, caller, data),
       reviewBusiness: () => businessService.reviewBusiness(businessDeps, caller, data),

@@ -54,10 +54,11 @@ export function preflight() {
     opsUrl: origin('OPS_URL'),
     edgeUrl: origin('EDGE_URL'),
     paystack: Boolean(env.PAYSTACK_SECRET_KEY),
+    bigquery: (env.BIGQUERY_EXPORT || '').trim().toLowerCase() === 'on',
     sms,
   };
   if (!/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/.test(cfg.androidPackage)) stop('ANDROID_PACKAGE is not valid', ['Use lowercase words separated by dots, e.g. `gh.swiftcourier.driver`.']);
-  summary(`Settings check: ✅ project \`${projectId}\` · payments ${cfg.paystack ? 'on' : 'off'} · SMS ${sms ? 'on' : 'off'} · maps on website ${env.MAPBOX_PUBLIC_TOKEN ? 'on' : 'basic'}\n`);
+  summary(`Settings check: ✅ project \`${projectId}\` · payments ${cfg.paystack ? 'on' : 'off'} · SMS ${sms ? 'on' : 'off'} · maps on website ${env.MAPBOX_PUBLIC_TOKEN ? 'on' : 'basic'} · BigQuery export ${cfg.bigquery ? 'on' : 'off'}\n`);
   return cfg;
 }
 

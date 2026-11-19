@@ -16,7 +16,7 @@ Monorepo for a company-operated courier service in Ghana: own vehicles, own driv
 | 3 | Driver app, dispatch, intra-city maps | ✅ Implemented & tested in emulators/browsers; driver app needs device field-testing |
 | 4 | Hubs, vehicles, manifests, intercity | ✅ Implemented & tested in emulators/browsers (driver-app hub steps need device testing) |
 | 5 | Business accounts, bulk bookings, invoices | ✅ Implemented & tested in emulators/browsers (invoice emails and online invoice payment not yet) |
-| 6 | Route optimisation, analytics, fleet | Not started |
+| 6 | Route optimisation, analytics, fleet | ✅ Implemented & tested in emulators/browsers (driver-app screens need device testing) |
 
 **What works in Phase 1:** guests can search addresses (via the edge Worker), describe packages, get a server-calculated itemised price (intra-city, intercity or long-distance, with weight, urgency, handling, bulk and contract rules), and confirm a booking that stores an immutable price snapshot under a unique tracking number.
 
@@ -28,7 +28,9 @@ Monorepo for a company-operated courier service in Ghana: own vehicles, own driv
 
 **What works in Phase 5:** companies register with their Registrar-General and TIN details and documents, are verified by an administrator, add staff, keep an address book, upload up to 200 deliveries at once from a CSV (checked and priced row by row before anything is booked, with printable labels), and — once finance approves credit — book on a monthly invoice. Finance generates invoices, records payments and sees overdue accounts; businesses see their invoices and monthly delivery reports.
 
-**Not yet available:** route optimisation and analytics (Phase 6), expense and driver-payment screens, invoice emails and online invoice payment, hub drop-off/collection by customers, automated intercity returns.
+**What works in Phase 6:** dispatch (or the driver) plans each driver's stops in the best order; drivers record odometer readings and fuel with receipt photos; fleet managers keep service schedules, insurance and roadworthy dates (expired papers block the vehicle) and maintenance records; finance approves expenses, runs monthly driver pay statements, tracks cash drivers collect and hand in, and gets a monthly report of revenue, costs and contribution by area, route and vehicle with automatic reconciliation checks. Optional daily export to BigQuery.
+
+**Not yet available:** invoice emails and online invoice payment, payroll deductions, hub drop-off/collection by customers, automated intercity returns.
 
 ## Layout
 

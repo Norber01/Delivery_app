@@ -55,10 +55,18 @@ Sequential invoice numbers (`INV-YYYYMM-NNNN`).
 `code` (`ACC-KSI`), `originHubId`, `destinationHubId`, `originAreaId`, `destinationAreaId` (derived from the hubs), `distanceKm`, `typicalDurationMinutes` (sets expected hub arrival), `schedule: { daysOfWeek, departureTimes[] }`, `active`. Customer prices for intercity are separate (pricing rules, per service-area pair).
 
 ### `vehicles/{id}` — W: S
-`registrationNumber`, `vehicleClass: motorbike | car | van | truck`, `capacityKg`, `capacityM3`, `homeHubId`, `status: available | in_use | maintenance | retired`, `odometerKm`, `insuranceExpiry`, `roadworthyExpiry`.
+`registrationNumber`, `vehicleClass: motorbike | car | van | truck`, `capacityKg`, `homeServiceAreaId`, `status: available | in_use | maintenance | retired`, `currentDriverUid`; Phase 6: `odometerKm` (highest reading; never lowered), `serviceIntervalKm`, `serviceIntervalDays`, `lastServiceAt`, `lastServiceKm`, `insuranceExpiry`, `roadworthyExpiry` (a shift cannot start while either has lapsed).
 
-### `vehicles/{id}/maintenance/{id}`, `vehicles/{id}/fuelLogs/{id}` — W: S
-Phase 6; fuel logs also produce an `expenses` document.
+### Phase 6 operational records — W: S (functions only)
+- `routePlans/{driverUid}`: latest optimised stop order — `stops[]: { seq, deliveryId, kind: pickup | drop, label, location, eta, dueAt, late }`, `travelMinutes`, `baselineMinutes` (assignment order), `savingPercent`, `lateStops`, `startFrom: live_location | first_stop`, `computedAt`, `computedBy`. Read: that driver, dispatch, admin.
+- `shifts/{shiftId}`: `driverUid`, `vehicleId`, `startedAt`, `endedAt`, `startOdometerKm`, `endOdometerKm` (days worked and distance for pay and vehicle reports).
+- `fuelLogs/{id}`: `vehicleId`, `driverUid`, `litres`, `amountPesewas`, `odometerKm`, `fullTank`, `station`, `receiptKey` (`receipt/…` in R2), `expenseId`, `filledAt`.
+- `maintenance/{id}`: `vehicleId`, `type: service | repair | tyres | inspection | other`, `description`, `costPesewas`, `odometerKm`, `performedAt`, `vendor`, `receiptKey`, `expenseId`, `recordedBy`.
+- `driverPayments/{YYYY-MM}_{uid}`: monthly statement — `lines[]: { label, quantity, ratePesewas, amountPesewas }`, `adjustments[]`, `grossPesewas`, `daysWorked`, `kmDriven`, `cashOutstandingPesewas`, `status: draft | approved | paid`, `approvedBy`, `paidAt`, `payout: { method, reference, by }`, `expenseId`.
+- `config/driverPay`: `dailyRatePesewas`, `perJobPesewas: { direct, first_mile, last_mile }`, `perLinehaulTripPesewas` (drivers may read it).
+- `driverCash/{uid}`: `collectedPesewas` (incremented in the same transaction that records a cash payment at pickup), `remittedPesewas`.
+- `cashRemittances/{id}`: `driverUid`, `amountPesewas`, `method`, `reference`, `receivedBy`, `receivedAt` (cannot exceed the cash the driver holds).
+- `reports/finance-{YYYY-MM}`: cached monthly finance report (revenue, collections, costs, contribution by area/route/vehicle, reconciliation checks).
 
 ## 2.3 Pricing
 
@@ -143,7 +151,7 @@ Idempotency markers for processed webhook events (`paystack_<event>_<id>`), crea
 `paymentId`, `trackingNumber`, `amountPesewas`, `status: pending | processed | failed`, `providerRefundId`, `reason`, `requestedBy`, `error`. Readable by finance/admin.
 
 ### `refunds/{id}`, `invoices/{id}`, `expenses/{id}`, `driverPayments/{id}` — W: S
-Invoices: `number`, `businessId`, `businessName`, `tin`, `period` (YYYY-MM), `part` (months over 400 lines are split), `lines[]: { trackingNumber, date, description, reference, amountPesewas }`, `totalPesewas`, `paidPesewas`, `status: issued | partially_paid | paid | overdue | void`, `issuedAt`, `dueAt`, `payments[]: { amountPesewas, method, reference, recordedBy, at }`, `voidReason`. Each invoiced booking carries `invoiceId` (stamped in the invoice's transaction, so no booking is billed twice). Readable by the business owner (not staff), finance and admins; the printable view is rendered by the web app (no stored PDF). Expenses: `category: fuel | maintenance | driver_payment | hub | other`, `amountPesewas`, `vehicleId?`, `hubId?`, `receiptR2Key?`, `approvedBy`.
+Invoices: `number`, `businessId`, `businessName`, `tin`, `period` (YYYY-MM), `part` (months over 400 lines are split), `lines[]: { trackingNumber, date, description, reference, amountPesewas }`, `totalPesewas`, `paidPesewas`, `status: issued | partially_paid | paid | overdue | void`, `issuedAt`, `dueAt`, `payments[]: { amountPesewas, method, reference, recordedBy, at }`, `voidReason`. Each invoiced booking carries `invoiceId` (stamped in the invoice's transaction, so no booking is billed twice). Readable by the business owner (not staff), finance and admins; the printable view is rendered by the web app (no stored PDF). Expenses: `category: fuel | maintenance | driver_payment | hub | other`, `description`, `amountPesewas`, `vehicleId`, `hubId`, `driverUid`, `receiptKey`, `incurredAt`, `status: submitted | approved | rejected`, `submittedBy`, `reviewedBy` (never the submitter), `reviewNote`, `sourceId` (fuel log, maintenance record or pay statement). Driver-pay expenses are created already approved when a statement is paid.
 
 ## 2.6 Support & audit
 

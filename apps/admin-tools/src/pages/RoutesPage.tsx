@@ -5,7 +5,11 @@ import { api, type ApiError } from '../lib/api';
 import { getFirebase } from '../lib/firebase';
 import { useNow, useQuery } from '../lib/useLive';
 
-const time = (iso: string) => new Date(iso).toLocaleTimeString('en-GH', { hour: '2-digit', minute: '2-digit' });
+const time = (iso: string) => {
+  const d = new Date(iso);
+  const t = d.toLocaleTimeString('en-GH', { hour: '2-digit', minute: '2-digit' });
+  return d.toDateString() === new Date().toDateString() ? t : `${d.toLocaleDateString('en-GH', { weekday: 'short', day: 'numeric', month: 'short' })} ${t}`;
+};
 
 /** Plan each on-shift driver's stops in the best order; drivers see the same plan in their app. */
 export function RoutesPage() {

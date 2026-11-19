@@ -46,6 +46,8 @@ Legend: **C** create · **R** read · **U** update · **D** delete/cancel · `ow
 
 > **Phase 5 as built:** business owners and staff both book (single and CSV bulk), use the address book and see reports; only the owner manages staff and sees invoices (staff do not). Verification decisions are admin/super_admin only; credit terms, contract pricing, invoice runs, payments and voids are finance/admin/super_admin. Registration documents are viewable by non-dispatcher operations staff through short-lived signed URLs. Removing a staff member resets their account to `customer` and revokes their sessions; their past bookings stay with the business.
 
+> **Phase 6 as built:** dispatchers (within their service areas) and admins plan routes; drivers plan and see their own. Fleet managers set vehicle schedules/documents and record maintenance; drivers log fuel for the vehicle of their current shift; hub operators may record expenses for their own hubs only. Finance (and admins) approve expenses — never one they submitted — set pay rates, prepare/adjust/approve/pay driver statements, record cash hand-ins and see the finance report. Drivers read only their own route plan, shifts, fuel logs, pay statements, cash ledger and hand-ins.
+
 ## 3.3 Enforcement layers
 
 1. **Cloudflare**: WAF, bot management, rate limits; Access in front of the ops app.

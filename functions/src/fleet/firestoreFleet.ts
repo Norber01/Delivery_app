@@ -41,8 +41,9 @@ export class FirestoreFleetStore implements FleetStore {
   private auditIn(tx: Transaction | FirebaseFirestore.WriteBatch, a: AuditEntry) {
     (tx as Transaction).create(this.col('auditLogs').doc(), { ...a, at: FieldValue.serverTimestamp() });
   }
+  /** Documents with their id (some collections, e.g. seeded service areas, keep it only as the doc id). */
   private async all<T>(q: FirebaseFirestore.Query): Promise<T[]> {
-    return (await q.get()).docs.map((d) => fromDoc<T>(d.data()));
+    return (await q.get()).docs.map((d) => fromDoc<T>({ id: d.id, ...d.data() }));
   }
   private async getMany<T>(name: Col, ids: string[]): Promise<T[]> {
     const out: T[] = [];

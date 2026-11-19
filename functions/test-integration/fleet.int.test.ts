@@ -34,7 +34,8 @@ describe.runIf(enabled)('Phase 6 fleet & finance (emulator)', () => {
     fleet = new FirestoreFleetStore(db, new FirestoreOpsStore(db));
     deps = { fleet, evidence: { exists: async () => true }, uploads: { workerUrl: 'https://edge.test', secret: 's' }, now: () => clock, newId: () => randomId(12) };
     const b = db.batch();
-    for (const a of areas) b.set(db.collection('serviceAreas').doc(a.id), a);
+    // Seeded like the real seed script: the id is only the document id.
+    for (const { id, ...a } of areas) b.set(db.collection('serviceAreas').doc(id), a);
     b.set(db.doc('drivers/kwame'), {
       uid: 'kwame', name: 'Kwame', phone: '+233241111111', email: 'k@x.gh', employeeNumber: 'K1', homeServiceAreaId: 'accra', status: 'active',
       currentShift: { id: 'sh1', vehicleId: 'bike1', vehicleClass: 'motorbike', serviceAreaId: 'accra', startedAt: '2026-11-18T07:00:00Z', activeUntil: '2026-11-18T21:00:00Z' },
@@ -66,17 +67,24 @@ describe.runIf(enabled)('Phase 6 fleet & finance (emulator)', () => {
   });
 
   it('concurrent fuel logs keep the odometer at the highest valid reading', async () => {
-    const r = await Promise.allSettled([5_040, 5_100, 4_000].map((odometerKm) => logFuel(deps, kwame, { litres: 3, amountPesewas: 4_500, odometerKm, fullTank: false })));
-    expect(r.map((x) => x.status)).toEqual(['fulfilled', 'fulfilled', 'rejected']);
-    expect((await db.doc('vehicles/bike1').get()).get('odometerKm')).toBe(5_100);
-    expect((await db.collection('fuelLogs').get()).size).toBe(2);
+    const readings = [5_040, 5_100, 4_000];
+    const r = await Promise.allSettled(readings.map((odometerKm) => logFuel(deps, kwame, { litres: 3, amountPesewas: 4_500, odometerKm, fullTank: false })));
+    // 4 000 is always refused; 5 040 is refused only if 5 100 committed first (readings never go down).
+    expect(r[2]!.status).toBe('rejected');
+    expect(r[1]!.status).toBe('fulfilled');
+    const accepted = readings.filter((_, i) => r[i]!.status === 'fulfilled');
+    expect((await db.doc('vehicles/bike1').get()).get('odometerKm')).toBe(Math.max(...accepted));
+    expect((await db.collection('fuelLogs').get()).size).toBe(accepted.length);
+    expect((await db.collection('expenses').where('category', '==', 'fuel').get()).size).toBe(accepted.length);
   });
 
   it('builds the month report from Firestore and the ledger reconciles', async () => {
     await recordCashRemittance(deps, finance, { driverUid: 'kwame', amountPesewas: 4_000, method: 'cash', reference: 'safe' });
+    await db.doc('expenses/e1').set({ id: 'e1', category: 'maintenance', description: 'Tyre', amountPesewas: 2_500, vehicleId: 'bike1', hubId: null, driverUid: null, receiptKey: null, incurredAt: '2026-11-10T09:00:00.000Z', status: 'approved', submittedBy: 'fm', reviewedBy: 'fin', reviewNote: null, sourceId: null });
     const r = await getFinanceReport({ fleet, now: () => clock }, finance, { period: '2026-11' });
     expect(r.collections).toMatchObject({ cashCollectedPesewas: 10_000, cashRemittedPesewas: 4_000 });
     expect(r.checks.filter((c) => !c.ok)).toEqual([]);
+    expect(r.byArea).toEqual([expect.objectContaining({ key: 'accra', label: 'Greater Accra (Accra–Tema)', costPesewas: 2_500 })]);
     expect((await db.doc('reports/finance-2026-11').get()).exists).toBe(true);
   });
 });

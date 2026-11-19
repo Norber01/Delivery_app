@@ -59,7 +59,7 @@ async function main() {
     const services = [
       'cloudresourcemanager', 'serviceusage', 'iam', 'firestore', 'firebasedatabase', 'firebaserules', 'identitytoolkit',
       'cloudfunctions', 'cloudbuild', 'artifactregistry', 'run', 'eventarc', 'pubsub', 'cloudscheduler', 'secretmanager',
-      'firebaseappcheck', 'recaptchaenterprise', 'firebaseinstallations', 'firebaseappdistribution', 'storage', 'logging',
+      'firebaseappcheck', 'recaptchaenterprise', 'firebaseinstallations', 'firebaseappdistribution', 'storage', 'logging', 'bigquery',
     ].map((s) => `${s}.googleapis.com`);
     const r = await gcp('POST', `https://serviceusage.googleapis.com/v1/projects/${P}/services:batchEnable`, { serviceIds: services });
     if (r.status !== 200) {
@@ -246,6 +246,7 @@ async function main() {
         PAYMENT_FALLBACK_EMAIL_DOMAIN: cfg.paymentEmailDomain || host(urls.web),
         SMS_SENDER_ID: cfg.smsSenderId,
         EDGE_WORKER_URL: urls.edge,
+        BIGQUERY_EXPORT: cfg.bigquery ? 'on' : 'off',
       };
       writeFileSync(join(ROOT, 'functions', `.env.${P}`), Object.entries(lines).map(([k, v]) => `${k}=${JSON.stringify(v)}`).join('\n') + '\n');
     });

@@ -221,3 +221,30 @@ describe('business & bulk schemas', async () => {
     expect(recordInvoicePaymentSchema.safeParse({ invoiceId: 'inv1', amountPesewas: 0, method: 'bank_transfer', reference: 'TX1' }).success).toBe(false);
   });
 });
+
+describe('Phase 6 inputs', () => {
+  it('expenses need a vehicle for fuel/maintenance and a hub for hub costs; driver pay is never entered by hand', async () => {
+    const { expenseSchema } = await import('../src/index.js');
+    const base = { description: 'Diesel for generator', amountPesewas: 20_000, incurredAt: '2026-11-19T09:00:00Z' };
+    expect(expenseSchema.safeParse({ ...base, category: 'hub', hubId: 'acc-01' }).success).toBe(true);
+    expect(expenseSchema.safeParse({ ...base, category: 'hub' }).success).toBe(false);
+    expect(expenseSchema.safeParse({ ...base, category: 'fuel' }).success).toBe(false);
+    expect(expenseSchema.safeParse({ ...base, category: 'driver_payment' }).success).toBe(false);
+    expect(expenseSchema.safeParse({ ...base, category: 'other', amountPesewas: 0 }).success).toBe(false);
+  });
+  it('fuel logs need litres, an amount, a whole-km odometer and a receipt key in the receipt area', async () => {
+    const { fuelLogSchema } = await import('../src/index.js');
+    const ok = { litres: 5.5, amountPesewas: 8_000, odometerKm: 12_040, fullTank: true, receiptKey: 'receipt/kwame/AbCdEfGhIjKl.jpg' };
+    expect(fuelLogSchema.safeParse(ok).success).toBe(true);
+    expect(fuelLogSchema.safeParse({ ...ok, odometerKm: 12_040.5 }).success).toBe(false);
+    expect(fuelLogSchema.safeParse({ ...ok, receiptKey: 'pod/GH1/AbCdEfGhIjKl.jpg' }).success).toBe(false);
+    expect(fuelLogSchema.safeParse({ ...ok, litres: 0 }).success).toBe(false);
+  });
+  it('pay adjustments are non-zero; rejecting an expense needs a reason', async () => {
+    const { payAdjustmentSchema, reviewExpenseSchema } = await import('../src/index.js');
+    expect(payAdjustmentSchema.safeParse({ statementId: '2026-11_kwame', label: 'Bonus', amountPesewas: 0 }).success).toBe(false);
+    expect(payAdjustmentSchema.safeParse({ statementId: '2026-11_kwame', label: 'Fuel advance', amountPesewas: -2_000 }).success).toBe(true);
+    expect(reviewExpenseSchema.safeParse({ expenseId: 'exp_1', decision: 'rejected' }).success).toBe(false);
+    expect(reviewExpenseSchema.safeParse({ expenseId: 'exp_1', decision: 'approved' }).success).toBe(true);
+  });
+});
