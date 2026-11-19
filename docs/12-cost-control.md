@@ -8,5 +8,8 @@
 | Mapbox | Free monthly tiers for map loads, geocoding, directions | Geocoding via Worker with Cloudflare cache (24 h) and per-IP limits; debounced autocomplete (≥ 3 chars, 350 ms); Directions only in `getQuote` (not intercity) and cached per leg; ETA only while viewed |
 | Cloudflare | Pages/Workers free plan | Workers paid plan only when request volume requires |
 | SMS | Pay-as-you-go | OTP only for POD and sign-in; status SMS configurable per customer |
+| Route planning | No external API | Built-in optimiser with road-speed estimates (no Mapbox Optimization/Matrix charges) |
+| Finance report | Firestore reads per report | Computed on request and cached 10 minutes; ledger checks use aggregation queries (sum) |
+| BigQuery | 10 GB storage + 1 TB queries/month free | Off by default (`BIGQUERY_EXPORT`); daily load jobs (free), day partitions, only the last 3 days reloaded |
 
 Budget alerts: set GCP budget with alerts at 50/80/100 % (Firebase is billed through GCP), Mapbox usage alerts in account settings, Cloudflare usage notifications. Review a monthly cost report per delivery (cost/delivery KPI). Do not assume commercial usage stays within free tiers — Blaze plan is required for Cloud Functions and outbound network calls (Mapbox, Paystack).

@@ -1,0 +1,9 @@
+rules_version = '2';
+// Firebase Storage is not used: binary evidence lives in Cloudflare R2 behind signed URLs.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

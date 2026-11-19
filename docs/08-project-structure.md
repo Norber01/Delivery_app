@@ -7,23 +7,28 @@ pnpm workspace monorepo.
 ├── apps/
 │   ├── web/                 Public booking site + customer (Ph2) + business (Ph5) dashboards
 │   │                        Vite, React, TypeScript, Tailwind → Cloudflare Pages
-│   ├── admin-tools/         Dispatch (Ph3–4) + admin/finance/fleet (Ph2–6) — separate host behind Cloudflare Access
-│   └── driver-app/          React Native (TypeScript), Android-first (Ph3)
+│   ├── admin-tools/         Ops app: dispatch + fleet (Ph3), hubs (Ph4), finance (later) — separate host behind Cloudflare Access
+│   └── driver-app/          Expo / React Native (TypeScript), Android-first (Ph3)
 ├── functions/               Firebase Cloud Functions v2 (TypeScript, bundled with esbuild)
 │   ├── src/
-│   │   ├── callable/        getQuote, createBooking, (later) payments, assignments …
-│   │   ├── services/        quoteService, bookingService — pure logic with injected repositories
-│   │   ├── lib/             auth guards, errors, rate limiter, audit log, hashing, map provider
-│   │   └── index.ts         exports deployed functions
-│   ├── test/                unit tests (vitest) — no emulator needed
-│   └── scripts/             build/deploy packaging
+│   │   ├── services/        quotes, bookings, payments, refunds, tracking, accounts, notifications
+│   │   ├── ops/             deliveries: pure decisions, dispatch/driver/shift/fleet services, Firestore+RTDB store
+│   │   ├── payments/        PaymentProvider port + Paystack adapter
+│   │   ├── notifications/   SMS port + Hubtel adapter, templates
+│   │   ├── store/           persistence ports and Firestore implementations
+│   │   ├── lib/             auth guards, errors, hashing
+│   │   └── index.ts         exports deployed functions (callables, webhook, triggers, schedules)
+│   ├── test/                unit tests (vitest, in-memory stores) — no emulator needed
+│   ├── test-integration/    emulator integration tests + browser E2E harness
+│   └── scripts/             build/deploy packaging, seed, bootstrap-admin
 ├── workers/
-│   └── api-edge/            Cloudflare Worker: geocoding proxy with caching + rate limiting
+│   └── api-edge/            Cloudflare Worker: geocoding proxy (cache, rate limits) + signed R2 evidence storage
 ├── packages/
 │   ├── constants/           roles, statuses, delivery types, regions, collection names
 │   ├── shared-types/        TypeScript domain types (Firestore documents, API contracts)
 │   ├── validation/          zod schemas shared by clients and functions
-│   └── shared-utils/        pricing engine, lifecycle state machine, geo, money, tracking numbers, phone
+│   ├── shared-utils/        pricing engine, lifecycle state machine, geo, GPS send policy, upload tokens, money, tracking numbers
+│   └── map-ui/              MapView (Mapbox GL, lazy) with tile-free schematic fallback — web + ops app
 ├── firebase/
 │   ├── firestore.rules
 │   ├── firestore.indexes.json
@@ -31,7 +36,6 @@ pnpm workspace monorepo.
 │   ├── storage.rules        (Firebase Storage unused → deny all)
 │   ├── seed/                sample config (service areas, pricing rules)
 │   └── rules-tests/         security rules tests (emulator)
-├── scripts/                 seeding / pricing publication / bootstrap admin
 ├── docs/                    this documentation
 ├── firebase.json, .firebaserc.example
 └── pnpm-workspace.yaml, tsconfig.base.json, package.json

@@ -1,0 +1,126 @@
+# Builds the driver app for Android on GitHub's computers. From your phone:
+# GitHub → Actions → Driver app (Android) → Run workflow.
+#   phones       an .apk sent privately to the drivers listed in DRIVER_TESTERS through Firebase
+#                App Distribution (each gets an email with an install link)
+#   google-play  an .aab to upload to Google Play (internal testing), downloadable from the run
+# See docs/13-phone-setup.md.
+name: Driver app (Android)
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Which environment the app connects to
+        type: choice
+        options: [staging, production]
+        default: staging
+      distribution:
+        description: How drivers get it
+        type: choice
+        options: [phones, google-play]
+        default: phones
+
+concurrency:
+  group: driver-app-${{ inputs.environment }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ inputs.distribution }} app (${{ inputs.environment }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    environment: ${{ inputs.environment }}
+    env:
+      DEPLOY_ENV: ${{ inputs.environment }}
+      DISTRIBUTION: ${{ inputs.distribution }}
+      GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+      COMPANY_NAME: ${{ vars.COMPANY_NAME }}
+      SUPPORT_PHONE: ${{ vars.SUPPORT_PHONE }}
+      DISPATCH_PHONE: ${{ vars.DISPATCH_PHONE }}
+      ANDROID_PACKAGE: ${{ vars.ANDROID_PACKAGE }}
+      PLAY_APP_SIGNING_SHA256: ${{ vars.PLAY_APP_SIGNING_SHA256 }}
+      DRIVER_TESTERS: ${{ vars.DRIVER_TESTERS }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - run: pnpm install --frozen-lockfile
+      - uses: google-github-actions/auth@v2
+        if: env.GCP_SA_KEY != ''
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - uses: google-github-actions/setup-gcloud@v2
+        if: env.GCP_SA_KEY != ''
+      - name: Configure the app for Firebase
+        id: prepare
+        run: node deploy/driver-app.mjs prepare
+      - name: Signing key
+        id: signing
+        env:
+          ANDROID_APP_ID: ${{ steps.prepare.outputs.android_app }}
+        run: node deploy/driver-app.mjs signing
+      - name: Generate the Android project
+        working-directory: apps/driver-app
+        run: npx expo prebuild --platform android --no-install --clean
+      - name: Build
+        working-directory: apps/driver-app/android
+        run: ./gradlew ${{ inputs.distribution == 'google-play' && 'bundleRelease' || 'assembleRelease' }} --no-daemon --stacktrace
+      - name: Sign
+        id: sign
+        working-directory: apps/driver-app/android/app/build/outputs
+        run: |
+          set -euo pipefail
+          name="driver-${{ inputs.environment }}-${{ github.run_number }}"
+          [ "${{ steps.prepare.outputs.kind }}" = "test" ] && name="$name-TEST-ONLY"
+          mkdir -p "$RUNNER_TEMP/out"
+          if [ "${{ inputs.distribution }}" = "google-play" ]; then
+            cp bundle/release/app-release.aab "$RUNNER_TEMP/out/$name.aab"
+            if [ "${{ steps.signing.outputs.signed }}" = "true" ]; then
+              zip -q -d "$RUNNER_TEMP/out/$name.aab" 'META-INF/*' || true
+              jarsigner -keystore "${{ steps.signing.outputs.keystore }}" -storepass:env KS_PW -keypass:env KS_PW \
+                -sigalg SHA256withRSA -digestalg SHA-256 "$RUNNER_TEMP/out/$name.aab" upload
+            fi
+            echo "file=$RUNNER_TEMP/out/$name.aab" >> "$GITHUB_OUTPUT"
+          else
+            if [ "${{ steps.signing.outputs.signed }}" = "true" ]; then
+              tools="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
+              "$tools/apksigner" sign --ks "${{ steps.signing.outputs.keystore }}" --ks-key-alias upload \
+                --ks-pass env:KS_PW --key-pass env:KS_PW \
+                --out "$RUNNER_TEMP/out/$name.apk" apk/release/app-release.apk
+              "$tools/apksigner" verify "$RUNNER_TEMP/out/$name.apk"
+            else
+              cp apk/release/app-release.apk "$RUNNER_TEMP/out/$name.apk"
+            fi
+            echo "file=$RUNNER_TEMP/out/$name.apk" >> "$GITHUB_OUTPUT"
+          fi
+          rm -f "${{ steps.signing.outputs.keystore }}"
+      # Public repositories: the APK carries an App Check token, so it is never attached to the
+      # run; it goes privately to drivers. App bundles for Google Play hold nothing secret.
+      - uses: actions/upload-artifact@v4
+        if: inputs.distribution == 'google-play' || steps.prepare.outputs.kind == 'test' || github.event.repository.private
+        with:
+          name: driver-app-${{ inputs.environment }}-${{ github.run_number }}
+          path: ${{ steps.sign.outputs.file }}
+          retention-days: 14
+      - name: Send to drivers (Firebase App Distribution)
+        if: inputs.distribution == 'phones' && steps.prepare.outputs.kind == 'real'
+        run: |
+          if [ -z "$DRIVER_TESTERS" ]; then
+            echo "⚠️ Add the variable **DRIVER_TESTERS** (drivers' emails, comma-separated) to send the app to drivers; this build was uploaded to Firebase App Distribution without inviting anyone." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          pnpm exec firebase appdistribution:distribute "${{ steps.sign.outputs.file }}" \
+            --app "${{ steps.prepare.outputs.android_app }}" --project "${{ steps.prepare.outputs.project }}" \
+            ${DRIVER_TESTERS:+--testers "$DRIVER_TESTERS"} \
+            --release-notes "Build ${{ github.run_number }} from ${{ github.sha }}"
+          echo "📲 Sent through Firebase App Distribution. Drivers open the invitation email on their phone and tap **Download**. New testers: add them to DRIVER_TESTERS and run this again." >> "$GITHUB_STEP_SUMMARY"

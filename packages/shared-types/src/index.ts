@@ -2,3 +2,8 @@ export * from './common.js';
 export * from './pricing.js';
 export * from './booking.js';
 export * from './network.js';
+export * from './payments.js';
+export * from './tracking.js';
+export * from './operations.js';
+export * from './business.js';
+export * from './fleet.js';

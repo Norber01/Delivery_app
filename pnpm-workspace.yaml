@@ -1,5 +1,7 @@
 packages:
   - "apps/web"
+  - "apps/admin-tools"
+  - "apps/driver-app"
   - "functions"
   - "workers/*"
   - "packages/*"

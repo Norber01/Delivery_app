@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { PAYMENT_PREFERENCES, SPECIAL_HANDLING, URGENCY_LEVELS } from '@courier/constants';
-import { addressSchema, contactSchema, pesewasSchema, safeText } from './primitives.js';
+import { addressSchema, contactSchema, optional, pesewasSchema, safeText } from './primitives.js';
 
 export const packageSchema = z.object({
   description: safeText(2, 200),
@@ -9,7 +9,7 @@ export const packageSchema = z.object({
   widthCm: z.number().finite().min(1).max(300),
   heightCm: z.number().finite().min(1).max(300),
   quantity: z.number().int().min(1).max(500),
-  declaredValuePesewas: pesewasSchema.optional(),
+  declaredValuePesewas: optional(pesewasSchema),
 });
 
 export const quoteRequestSchema = z
@@ -48,7 +48,7 @@ export const createBookingRequestSchema = z.object({
   quote: quoteRequestSchema,
   sender: contactSchema,
   recipient: contactSchema,
-  instructions: safeText(1, 500).optional(),
+  instructions: optional(safeText(1, 500)),
   paymentPreference: z.enum(PAYMENT_PREFERENCES),
   acceptTerms: z.literal(true),
 });

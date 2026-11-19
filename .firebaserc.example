@@ -1,0 +1,6 @@
+{
+  "projects": {
+    "staging": "your-company-courier-staging",
+    "production": "your-company-courier-prod"
+  }
+}

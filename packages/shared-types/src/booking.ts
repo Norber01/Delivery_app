@@ -68,5 +68,10 @@ export interface DeliveryRequestDoc {
   paymentStatus: PaymentStatus;
   guestAccessHash: string | null;
   deliveryId: string | null;
-  source: 'web' | 'business_portal' | 'ops';
+  source: 'web' | 'business_portal' | 'ops' | 'bulk';
+  /** Business bookings: seller's own order reference and bulk batch. */
+  clientReference?: string | null;
+  bulkBatchId?: string | null;
+  /** Invoice billing: set when the booking is put on an invoice. */
+  invoiceId?: string | null;
 }

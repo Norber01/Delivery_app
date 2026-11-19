@@ -1,0 +1,6 @@
+.expo/
+android/
+ios/
+google-services.json
+*.keystore
+.env

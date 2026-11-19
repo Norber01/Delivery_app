@@ -1,0 +1,200 @@
+rules_version = '2';
+
+// Deny-by-default. All business writes (bookings, deliveries, payments, pricing,
+// audit logs) go through Cloud Functions using the Admin SDK, which bypasses
+// these rules. Clients may only read what they own and edit a few profile fields.
+// See docs/03-roles-permissions.md and docs/10-security.md.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function role() { return signedIn() ? request.auth.token.get('role', '') : ''; }
+    function hasMfa() {
+      return signedIn() && request.auth.token.get('firebase', {}).get('sign_in_second_factor', null) != null;
+    }
+    // Staff access additionally requires an MFA session.
+    function staffIn(roles) { return role() in roles && hasMfa(); }
+    function isOps() { return staffIn(['dispatcher', 'hub_operator', 'finance', 'admin', 'super_admin']); }
+    function isAdmin() { return staffIn(['admin', 'super_admin']); }
+    function isBusinessMember(businessId) {
+      return role() in ['business_owner', 'business_staff']
+        && businessId is string
+        && request.auth.token.get('businessId', '') == businessId;
+    }
+
+    // ---- Identity ---------------------------------------------------------
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow write: if false; // role and status are server-managed
+    }
+
+    match /customers/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow create, update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['savedAddresses', 'notificationPrefs', 'marketingOptIn', 'defaultPaymentPreference'])
+        && (!('savedAddresses' in request.resource.data) || (request.resource.data.savedAddresses is list && request.resource.data.savedAddresses.size() <= 20))
+        && (!('marketingOptIn' in request.resource.data) || request.resource.data.marketingOptIn is bool)
+        && (!('defaultPaymentPreference' in request.resource.data) || request.resource.data.defaultPaymentPreference in ['mobile_money', 'card', 'cash_on_pickup'])
+        && (!('notificationPrefs' in request.resource.data) || (
+              request.resource.data.notificationPrefs is map
+              && request.resource.data.notificationPrefs.keys().hasOnly(['smsBookingUpdates', 'smsPaymentReceipts'])));
+      allow delete: if false;
+    }
+
+    match /sellers/{businessId} {
+      allow read: if isBusinessMember(businessId) || isAdmin() || staffIn(['finance']);
+      allow write: if false;
+
+      // The business's own customers; written through validated functions only.
+      match /addressBook/{entryId} {
+        allow read: if isBusinessMember(businessId);
+        allow write: if false;
+      }
+    }
+
+    // ---- Operations (Phase 3) ------------------------------------------------
+    function isDriver() { return role() == 'driver'; }
+
+    match /deliveries/{id} {
+      // Drivers read the jobs they hold or have held; dispatch/ops staff (MFA) read all.
+      allow read: if isOps()
+        || (isDriver() && (resource.data.currentDriverUid == request.auth.uid || request.auth.uid in resource.data.driverUids));
+      allow write: if false;
+    }
+
+    match /assignments/{id} {
+      allow read: if isOps() || (isDriver() && resource.data.driverUid == request.auth.uid);
+      allow write: if false;
+    }
+
+    // Linehaul manifests: ops/hub staff (MFA); the assigned linehaul driver sees their own.
+    match /manifests/{id} {
+      allow read: if isOps() || (isDriver() && resource.data.driverUid == request.auth.uid);
+      allow write: if false;
+    }
+
+    match /vehicles/{id} {
+      allow read: if isDriver() || isOps() || staffIn(['fleet_manager']);
+      allow write: if false;
+    }
+
+    // Full timeline incl. internal notes for ops staff; customers get public messages via getTrackingView.
+    match /trackingEvents/{id} {
+      allow read: if isOps();
+      allow write: if false;
+    }
+
+    match /proofOfDelivery/{id} {
+      allow read: if staffIn(['dispatcher', 'finance', 'admin', 'super_admin']);
+      allow write: if false;
+    }
+
+    match /drivers/{uid} {
+      allow read: if (signedIn() && request.auth.uid == uid && role() == 'driver') || isOps() || staffIn(['fleet_manager']);
+      allow write: if false;
+    }
+
+    match /staff/{uid} {
+      allow read: if (signedIn() && request.auth.uid == uid) || isAdmin();
+      allow write: if false;
+    }
+
+    // ---- Public network information --------------------------------------
+    match /serviceAreas/{id} { allow read: if true; allow write: if false; }
+    match /hubs/{id} { allow read: if true; allow write: if false; }
+    match /routes/{id} { allow read: if true; allow write: if false; }
+
+    // ---- Pricing (server-written; staff may read) --------------------------
+    match /pricingRules/{version} { allow read: if isOps(); allow write: if false; }
+    match /config/{doc} {
+      // Drivers may read how they are paid (config/driverPay); everything else is staff-only.
+      allow read: if isOps() || staffIn(['fleet_manager']) || (doc == 'driverPay' && isDriver());
+      allow write: if false;
+    }
+    match /contractPricing/{id} {
+      allow read: if isBusinessMember(resource.data.businessId) || staffIn(['finance', 'admin', 'super_admin']);
+      allow write: if false;
+    }
+
+    // ---- Bookings ----------------------------------------------------------
+    // Guests read their booking through a function (tracking number + token), never directly.
+    match /deliveryRequests/{trackingNumber} {
+      allow read: if (signedIn() && resource.data.customerUid == request.auth.uid)
+        || isBusinessMember(resource.data.businessId)
+        || isOps();
+      allow write: if false;
+    }
+
+    match /payments/{id} {
+      allow read: if (signedIn() && resource.data.customerUid == request.auth.uid)
+        || (role() == 'business_owner' && isBusinessMember(resource.data.businessId))
+        || staffIn(['finance', 'admin', 'super_admin']);
+      allow write: if false;
+    }
+
+    match /refunds/{id} {
+      allow read: if staffIn(['finance', 'admin', 'super_admin']);
+      allow write: if false;
+    }
+
+    match /invoices/{id} {
+      allow read: if (role() == 'business_owner' && isBusinessMember(resource.data.businessId))
+        || staffIn(['finance', 'admin', 'super_admin']);
+      allow write: if false;
+    }
+
+    // ---- Phase 6: routes, fleet, expenses, driver pay, analytics (written by functions only) ----
+    function isOwnDriver(uid) { return isDriver() && request.auth.uid == uid; }
+    function isFleet() { return staffIn(['fleet_manager', 'admin', 'super_admin']); }
+    function isFinance() { return staffIn(['finance', 'admin', 'super_admin']); }
+
+    match /routePlans/{uid} {
+      allow read: if isOwnDriver(uid) || staffIn(['dispatcher', 'admin', 'super_admin']);
+      allow write: if false;
+    }
+    match /shifts/{id} {
+      allow read: if (isDriver() && resource.data.driverUid == request.auth.uid) || isFleet() || isFinance();
+      allow write: if false;
+    }
+    match /fuelLogs/{id} {
+      allow read: if (isDriver() && resource.data.driverUid == request.auth.uid) || isFleet() || isFinance();
+      allow write: if false;
+    }
+    match /maintenance/{id} {
+      allow read: if isFleet() || isFinance();
+      allow write: if false;
+    }
+    match /expenses/{id} {
+      allow read: if isFinance() || isFleet();
+      allow write: if false;
+    }
+    match /driverPayments/{id} {
+      allow read: if (isDriver() && resource.data.driverUid == request.auth.uid) || isFinance();
+      allow write: if false;
+    }
+    match /driverCash/{uid} {
+      allow read: if isOwnDriver(uid) || isFinance();
+      allow write: if false;
+    }
+    match /cashRemittances/{id} {
+      allow read: if (isDriver() && resource.data.driverUid == request.auth.uid) || isFinance();
+      allow write: if false;
+    }
+    match /reports/{id} {
+      allow read: if isFinance();
+      allow write: if false;
+    }
+
+    match /auditLogs/{id} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // Server-only: quotes, rate limits, raw payment events, tracking events (served through
+    // getTrackingView so guests and recipients see only public messages), notifications, POD secrets and
+    // every collection not listed above fall through to deny.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
