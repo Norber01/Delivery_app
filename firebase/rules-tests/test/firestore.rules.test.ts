@@ -258,3 +258,58 @@ describe('Phase 5: business accounts', () => {
     await assertFails(getDoc(doc(owner(), 'counters/invoice-2026-11')));
   });
 });
+
+describe('Phase 6: routes, fleet, expenses, driver pay', () => {
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await setDoc(doc(db, 'routePlans/kwame'), { driverUid: 'kwame', stops: [] });
+      await setDoc(doc(db, 'shifts/sh1'), { driverUid: 'kwame', startOdometerKm: 10 });
+      await setDoc(doc(db, 'fuelLogs/f1'), { driverUid: 'kwame', litres: 5 });
+      await setDoc(doc(db, 'maintenance/m1'), { vehicleId: 'bike1' });
+      await setDoc(doc(db, 'expenses/e1'), { category: 'fuel', amountPesewas: 100, status: 'submitted' });
+      await setDoc(doc(db, 'driverPayments/2026-11_kwame'), { driverUid: 'kwame', grossPesewas: 9000, status: 'draft' });
+      await setDoc(doc(db, 'driverCash/kwame'), { collectedPesewas: 500, remittedPesewas: 0 });
+      await setDoc(doc(db, 'cashRemittances/r1'), { driverUid: 'kwame', amountPesewas: 100 });
+      await setDoc(doc(db, 'reports/finance-2026-11'), { period: '2026-11' });
+      await setDoc(doc(db, 'config/driverPay'), { dailyRatePesewas: 8000 });
+    });
+  });
+  const kwame = () => as('kwame', { role: 'driver' });
+  const esi = () => as('esi', { role: 'driver' });
+  const fin = () => as('f', { role: 'finance', ...mfa });
+  const fleet = () => as('fm', { role: 'fleet_manager', ...mfa });
+  const disp = () => as('d', { role: 'dispatcher', ...mfa });
+
+  it('drivers see only their own plan, shifts, fuel, pay and cash — and the pay rates', async () => {
+    for (const path of ['routePlans/kwame', 'shifts/sh1', 'fuelLogs/f1', 'driverPayments/2026-11_kwame', 'driverCash/kwame', 'cashRemittances/r1', 'config/driverPay']) {
+      await assertSucceeds(getDoc(doc(kwame(), path)));
+    }
+    for (const path of ['routePlans/kwame', 'shifts/sh1', 'fuelLogs/f1', 'driverPayments/2026-11_kwame', 'driverCash/kwame', 'cashRemittances/r1']) {
+      await assertFails(getDoc(doc(esi(), path)));
+    }
+    for (const path of ['expenses/e1', 'maintenance/m1', 'reports/finance-2026-11', 'config/pricing']) await assertFails(getDoc(doc(kwame(), path)));
+  });
+
+  it('staff see what their role needs; finance figures need an MFA session', async () => {
+    await assertSucceeds(getDoc(doc(disp(), 'routePlans/kwame')));
+    await assertFails(getDoc(doc(disp(), 'expenses/e1')));
+    await assertFails(getDoc(doc(disp(), 'driverPayments/2026-11_kwame')));
+    await assertSucceeds(getDoc(doc(fleet(), 'maintenance/m1')));
+    await assertSucceeds(getDoc(doc(fleet(), 'expenses/e1')));
+    await assertFails(getDoc(doc(fleet(), 'driverPayments/2026-11_kwame')));
+    await assertFails(getDoc(doc(fleet(), 'reports/finance-2026-11')));
+    await assertSucceeds(getDoc(doc(fin(), 'reports/finance-2026-11')));
+    await assertSucceeds(getDoc(doc(fin(), 'driverCash/kwame')));
+    await assertFails(getDoc(doc(as('f', { role: 'finance' }), 'reports/finance-2026-11')));
+  });
+
+  it('nobody writes these records directly (approvals, pay and cash go through functions)', async () => {
+    await assertFails(updateDoc(doc(kwame(), 'driverPayments/2026-11_kwame'), { grossPesewas: 99999 }));
+    await assertFails(updateDoc(doc(kwame(), 'driverCash/kwame'), { remittedPesewas: 500 }));
+    await assertFails(setDoc(doc(kwame(), 'fuelLogs/f2'), { driverUid: 'kwame', litres: 50 }));
+    await assertFails(updateDoc(doc(fin(), 'expenses/e1'), { status: 'approved' }));
+    await assertFails(setDoc(doc(fleet(), 'maintenance/m2'), { vehicleId: 'bike1' }));
+    await assertFails(updateDoc(doc(fin(), 'config/driverPay'), { dailyRatePesewas: 1 }));
+  });
+});

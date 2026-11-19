@@ -106,7 +106,11 @@ service cloud.firestore {
 
     // ---- Pricing (server-written; staff may read) --------------------------
     match /pricingRules/{version} { allow read: if isOps(); allow write: if false; }
-    match /config/{doc} { allow read: if isOps(); allow write: if false; }
+    match /config/{doc} {
+      // Drivers may read how they are paid (config/driverPay); everything else is staff-only.
+      allow read: if isOps() || staffIn(['fleet_manager']) || (doc == 'driverPay' && isDriver());
+      allow write: if false;
+    }
     match /contractPricing/{id} {
       allow read: if isBusinessMember(resource.data.businessId) || staffIn(['finance', 'admin', 'super_admin']);
       allow write: if false;
@@ -136,6 +140,48 @@ service cloud.firestore {
     match /invoices/{id} {
       allow read: if (role() == 'business_owner' && isBusinessMember(resource.data.businessId))
         || staffIn(['finance', 'admin', 'super_admin']);
+      allow write: if false;
+    }
+
+    // ---- Phase 6: routes, fleet, expenses, driver pay, analytics (written by functions only) ----
+    function isOwnDriver(uid) { return isDriver() && request.auth.uid == uid; }
+    function isFleet() { return staffIn(['fleet_manager', 'admin', 'super_admin']); }
+    function isFinance() { return staffIn(['finance', 'admin', 'super_admin']); }
+
+    match /routePlans/{uid} {
+      allow read: if isOwnDriver(uid) || staffIn(['dispatcher', 'admin', 'super_admin']);
+      allow write: if false;
+    }
+    match /shifts/{id} {
+      allow read: if (isDriver() && resource.data.driverUid == request.auth.uid) || isFleet() || isFinance();
+      allow write: if false;
+    }
+    match /fuelLogs/{id} {
+      allow read: if (isDriver() && resource.data.driverUid == request.auth.uid) || isFleet() || isFinance();
+      allow write: if false;
+    }
+    match /maintenance/{id} {
+      allow read: if isFleet() || isFinance();
+      allow write: if false;
+    }
+    match /expenses/{id} {
+      allow read: if isFinance() || isFleet();
+      allow write: if false;
+    }
+    match /driverPayments/{id} {
+      allow read: if (isDriver() && resource.data.driverUid == request.auth.uid) || isFinance();
+      allow write: if false;
+    }
+    match /driverCash/{uid} {
+      allow read: if isOwnDriver(uid) || isFinance();
+      allow write: if false;
+    }
+    match /cashRemittances/{id} {
+      allow read: if (isDriver() && resource.data.driverUid == request.auth.uid) || isFinance();
+      allow write: if false;
+    }
+    match /reports/{id} {
+      allow read: if isFinance();
       allow write: if false;
     }
 
