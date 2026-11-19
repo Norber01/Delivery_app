@@ -75,3 +75,14 @@ describe('business documents', () => {
     expect((await call(await signed('PUT', { key: 'pod/GHX/AbCdEfGhIjKlMnOpQrSt.pdf', contentType: 'application/pdf' }), pdf(500))).status).toBe(404);
   });
 });
+
+describe('receipts', () => {
+  it('accepts signed receipt photos and PDFs under receipt/ only', async () => {
+    const { bucket, call } = setup();
+    const key = 'receipt/kwame/AbCdEfGhIjKlMnOpQrSt.jpg';
+    const jpg = (n: number) => ({ method: 'PUT', body: new Uint8Array(n), headers: { 'Content-Type': 'image/jpeg', 'Content-Length': String(n) } });
+    expect((await call(await signed('PUT', { key, contentType: 'image/jpeg' }), jpg(800))).status).toBe(201);
+    expect(bucket.objects.has(key)).toBe(true);
+    expect((await call(await signed('PUT', { key: 'receipts/kwame/AbCdEfGhIjKlMnOpQrSt.jpg', contentType: 'image/jpeg' }), jpg(800))).status).toBe(404);
+  });
+});

@@ -233,12 +233,16 @@ export async function requestUpload(deps: OpsDeps, caller: Caller, raw: unknown)
 
 /** Short-lived view URL for a POD photo (ops staff only). */
 export async function getEvidenceUrl(deps: OpsDeps, caller: Caller, raw: unknown): Promise<{ url: string }> {
-  requireRole(caller, ['dispatcher', 'finance', 'admin', 'super_admin']);
+  requireRole(caller, ['dispatcher', 'finance', 'fleet_manager', 'admin', 'super_admin']);
   const key = typeof (raw as { key?: unknown })?.key === 'string' ? (raw as { key: string }).key : '';
-  const pod = /^pod\/[A-Za-z0-9_-]{1,64}\/[A-Za-z0-9_-]{8,64}\.(jpg|png|webp)$/.test(key);
-  // Business registration documents are visible to admin/finance only.
-  const kyb = /^kyb\/[A-Za-z0-9_-]{1,64}\/[A-Za-z0-9_-]{8,64}\.(jpg|png|webp|pdf)$/.test(key) && caller.role !== 'dispatcher';
-  if (!pod && !kyb) throw new AppError('VALIDATION_FAILED', 'Invalid key.', 'invalid-argument');
+  const doc = (prefix: string) => new RegExp(`^${prefix}\\/[A-Za-z0-9_-]{1,64}\\/[A-Za-z0-9_-]{8,64}\\.(jpg|png|webp|pdf)$`).test(key);
+  // Proof of delivery: dispatch, finance, admin. Business documents: finance, admin.
+  // Receipts (fuel, maintenance, expenses): finance, fleet, admin.
+  const r = caller.role;
+  const pod = /^pod\/[A-Za-z0-9_-]{1,64}\/[A-Za-z0-9_-]{8,64}\.(jpg|png|webp)$/.test(key) && r !== 'fleet_manager';
+  const kyb = doc('kyb') && r !== 'dispatcher' && r !== 'fleet_manager';
+  const receipt = doc('receipt') && r !== 'dispatcher';
+  if (!pod && !kyb && !receipt) throw new AppError('VALIDATION_FAILED', 'Invalid key.', 'invalid-argument');
   const expires = Math.floor(deps.now().getTime() / 1000) + 5 * 60;
   return { url: await evidenceUrl(deps.uploads.workerUrl, deps.uploads.secret, { method: 'GET', key, expires }) };
 }

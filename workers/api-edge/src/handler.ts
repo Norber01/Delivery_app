@@ -54,7 +54,7 @@ export function normalizeQuery(q: string): string {
 }
 
 // POD photos and business registration documents (PDF allowed for documents only).
-const EVIDENCE_KEY = /^(pod\/[A-Za-z0-9_-]{1,64}\/[A-Za-z0-9_-]{8,64}\.(jpg|png|webp)|kyb\/[A-Za-z0-9_-]{1,64}\/[A-Za-z0-9_-]{8,64}\.(jpg|png|webp|pdf))$/;
+const EVIDENCE_KEY = /^(pod\/[A-Za-z0-9_-]{1,64}\/[A-Za-z0-9_-]{8,64}\.(jpg|png|webp)|(kyb|receipt)\/[A-Za-z0-9_-]{1,64}\/[A-Za-z0-9_-]{8,64}\.(jpg|png|webp|pdf))$/;
 
 /**
  * Proof-of-delivery photos in a private R2 bucket. Every request needs a short-lived URL signed

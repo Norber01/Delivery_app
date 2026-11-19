@@ -5,6 +5,7 @@ import { useState, type FormEvent } from 'react';
 import { api, ApiError } from '../lib/api';
 import { getFirebase } from '../lib/firebase';
 import { useQuery } from '../lib/useLive';
+import { VehicleCare } from './VehicleCare';
 
 export function FleetPage() {
   const { db } = getFirebase();
@@ -69,6 +70,7 @@ export function FleetPage() {
         </table>
         <NewVehicleForm />
       </section>
+      <VehicleCare vehicles={vehicles.data} />
     </div>
   );
 }

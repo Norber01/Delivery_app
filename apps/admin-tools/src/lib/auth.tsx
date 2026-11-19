@@ -52,3 +52,4 @@ export const canManageNetwork = (r: Role | null) => r === 'admin' || r === 'supe
 export const canManageBusinesses = (r: Role | null) => r === 'finance' || r === 'admin' || r === 'super_admin';
 export const canReviewBusinesses = (r: Role | null) => r === 'admin' || r === 'super_admin';
 export const canManageInvoices = canManageBusinesses;
+export const canManageExpenses = (r: Role | null) => r === 'finance' || r === 'fleet_manager' || r === 'admin' || r === 'super_admin';
