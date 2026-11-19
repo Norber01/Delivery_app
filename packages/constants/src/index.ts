@@ -281,7 +281,30 @@ export const COLLECTIONS = {
   uploads: 'uploads',
   bulkBatches: 'bulkBatches',
   counters: 'counters',
+  routePlans: 'routePlans',
+  shifts: 'shifts',
+  fuelLogs: 'fuelLogs',
+  maintenance: 'maintenance',
+  driverPayments: 'driverPayments',
+  driverCash: 'driverCash',
+  cashRemittances: 'cashRemittances',
+  reports: 'reports',
 } as const;
+
+// ---- Phase 6: fleet, expenses, driver pay, analytics --------------------------------------
+
+export const EXPENSE_CATEGORIES = ['fuel', 'maintenance', 'driver_payment', 'hub', 'other'] as const;
+export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number];
+export const EXPENSE_STATUSES = ['submitted', 'approved', 'rejected'] as const;
+export type ExpenseStatus = (typeof EXPENSE_STATUSES)[number];
+export const MAINTENANCE_TYPES = ['service', 'repair', 'tyres', 'inspection', 'other'] as const;
+export type MaintenanceType = (typeof MAINTENANCE_TYPES)[number];
+export const DRIVER_PAY_STATUSES = ['draft', 'approved', 'paid'] as const;
+export type DriverPayStatus = (typeof DRIVER_PAY_STATUSES)[number];
+export const PAYOUT_METHODS = ['mobile_money', 'bank_transfer', 'cash'] as const;
+export type PayoutMethod = (typeof PAYOUT_METHODS)[number];
+/** Reminders: a service/document is "due soon" this close to its limit. */
+export const MAINTENANCE_WARNING = { days: 14, km: 500 } as const;
 
 /** Stable error codes returned by functions (in `details.code`) so clients can show precise messages. */
 export const ERROR_CODES = [
@@ -336,5 +359,8 @@ export const ERROR_CODES = [
   'ALREADY_REGISTERED',
   'ACCOUNT_EXISTS',
   'BATCH_EXPIRED',
+  'ODOMETER_INVALID',
+  'VEHICLE_DOCUMENTS_EXPIRED',
+  'ALREADY_FINAL',
 ] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number];

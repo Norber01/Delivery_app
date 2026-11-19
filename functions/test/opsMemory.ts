@@ -22,6 +22,8 @@ const clone = <T>(v: T): T => structuredClone(v);
 
 /** In-memory OpsStore sharing bookings/events/notifications/audit with a MemoryStore. */
 export class MemoryOpsStore implements OpsStore {
+  /** Phase 6 cash ledger (shared with the fleet memory store). */
+  driverCash = new Map<string, { driverUid: string; collectedPesewas: number; remittedPesewas: number }>();
   deliveries = new Map<string, DeliveryRecord>();
   assignments = new Map<string, AssignmentRecord>();
   podSecrets = new Map<string, PodSecret>();
@@ -85,7 +87,14 @@ export class MemoryOpsStore implements OpsStore {
     if (m.podSecret === null) this.podSecrets.delete(id);
     else if (m.podSecret) this.podSecrets.set(id, clone(m.podSecret));
     if (m.pod) this.pods.set(m.pod.kind === 'return' ? `${id}_return` : id, clone(m.pod));
-    if (m.payment) this.store.payments.set(m.payment.id, clone(m.payment));
+    if (m.payment) {
+      this.store.payments.set(m.payment.id, clone(m.payment));
+      if (m.payment.provider === 'cash' && m.payment.collectedBy) {
+        const l = this.driverCash.get(m.payment.collectedBy) ?? { driverUid: m.payment.collectedBy, collectedPesewas: 0, remittedPesewas: 0 };
+        l.collectedPesewas += m.payment.amountPesewas;
+        this.driverCash.set(m.payment.collectedBy, l);
+      }
+    }
     this.store.events.push(...(m.events ?? []));
     for (const n of m.notifications ?? []) await this.store.queueNotification(n);
     this.store.audit.push(...(m.audit ?? []));

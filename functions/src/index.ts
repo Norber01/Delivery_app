@@ -56,6 +56,12 @@ import type { BusinessIdentityPort } from './business/types.js';
 import type { BusinessDeps } from './business/businessService.js';
 import type { BulkDeps } from './business/bulkService.js';
 import type { InvoiceDeps } from './business/invoiceService.js';
+import { FirestoreFleetStore } from './fleet/firestoreFleet.js';
+import * as fleetService from './fleet/fleetService.js';
+import { getFinanceReport as getFinanceReportService } from './fleet/financeService.js';
+import { planDriverRoute as planDriverRouteService } from './fleet/routeService.js';
+import { exportRecentDays } from './fleet/bigqueryExport.js';
+import { FirestoreExportSource, LiveBigQuery } from './fleet/bigqueryLive.js';
 
 initializeApp();
 setGlobalOptions({ region: FIREBASE_REGION, maxInstances: 20 });
@@ -67,6 +73,7 @@ const PAYMENT_FALLBACK_EMAIL_DOMAIN = defineString('PAYMENT_FALLBACK_EMAIL_DOMAI
   description: 'Company-controlled domain for checkout emails when a customer gives none',
 });
 const SMS_SENDER_ID = defineString('SMS_SENDER_ID', { default: 'Courier' });
+const BIGQUERY_EXPORT = defineString('BIGQUERY_EXPORT', { default: 'off', description: 'on = daily export of bookings, payments, expenses, fuel, shifts and driver pay to BigQuery' });
 const EDGE_WORKER_URL = defineString('EDGE_WORKER_URL', { description: 'Edge Worker origin serving /evidence (POD photos in R2)' });
 
 const MAPBOX_SERVER_TOKEN = defineSecret('MAPBOX_SERVER_TOKEN');
@@ -83,6 +90,7 @@ const store = new FirestoreStore(db);
 const rateLimiter = new FirestoreRateLimiter(db);
 const opsStore = new FirestoreOpsStore(db);
 const live = new RtdbLive(getDatabase());
+const fleetStore = new FirestoreFleetStore(db, opsStore);
 
 /** Cryptographically random 6-digit delivery code. */
 const newOtp = () => String(randomInt(0, 1_000_000)).padStart(6, '0');
@@ -99,6 +107,7 @@ function opsDeps(): OpsDeps {
     newOtp,
     site: site(),
     uploads: { workerUrl, secret },
+    fleet: fleetStore,
   };
 }
 
@@ -293,7 +302,7 @@ export const dispatchAction = callable([UPLOAD_SIGNING_SECRET], (req) => dispatc
 export const driverAction = callable([UPLOAD_SIGNING_SECRET], (req) => driverActionService(opsDeps(), callerFromToken(req.auth), req.data));
 
 export const startShift = callable([UPLOAD_SIGNING_SECRET], (req) => startShiftService(opsDeps(), callerFromToken(req.auth), req.data));
-export const endShift = callable([UPLOAD_SIGNING_SECRET], (req) => endShiftService(opsDeps(), callerFromToken(req.auth)));
+export const endShift = callable([UPLOAD_SIGNING_SECRET], (req) => endShiftService(opsDeps(), callerFromToken(req.auth), req.data));
 
 /** Signed R2 upload URL for a POD photo (assigned driver only). */
 export const requestUpload = callable([UPLOAD_SIGNING_SECRET], (req) => requestUploadService(opsDeps(), callerFromToken(req.auth), req.data));
@@ -420,4 +429,41 @@ export const monthlyInvoiceRun = onSchedule({ schedule: '13 2 1 * *', timeZone: 
 /** Daily: mark unpaid invoices past due; overdue businesses cannot book on account. */
 export const markOverdueInvoices = onSchedule({ schedule: '37 6 * * *', timeZone: 'Africa/Accra' }, async () => {
   console.log('Overdue', await invoiceService.markOverdueInvoices(invoiceDeps()));
+});
+
+// ---- Route optimisation, fleet, expenses, driver pay, analytics (Phase 6) -----------------------
+
+function fleetDeps(): fleetService.FleetDeps {
+  const o = opsDeps();
+  return { fleet: fleetStore, evidence: o.evidence, uploads: o.uploads, now: () => new Date(), newId: () => randomId(12) };
+}
+const withFleet = <T>(fn: (deps: fleetService.FleetDeps, caller: ReturnType<typeof callerFromToken>, data: unknown) => Promise<T>) =>
+  callable([UPLOAD_SIGNING_SECRET], (req) => fn(fleetDeps(), callerFromToken(req.auth), req.data));
+
+/** Optimised stop order for a driver's current jobs (dispatch, or the driver themselves). */
+export const planDriverRoute = callable([], (req) => planDriverRouteService({ fleet: fleetStore, live, now: () => new Date() }, callerFromToken(req.auth), req.data));
+export const setVehicleSchedule = withFleet(fleetService.setVehicleSchedule);
+export const recordMaintenance = withFleet(fleetService.recordMaintenance);
+export const requestReceiptUpload = withFleet(fleetService.requestReceiptUpload);
+export const logFuel = withFleet(fleetService.logFuel);
+export const submitExpense = withFleet(fleetService.submitExpense);
+export const reviewExpense = withFleet(fleetService.reviewExpense);
+export const setDriverPayRules = withFleet(fleetService.setPayRules);
+export const generateDriverPay = withFleet(fleetService.generateDriverPay);
+export const adjustDriverPay = withFleet(fleetService.adjustDriverPay);
+export const approveDriverPay = withFleet(fleetService.approveDriverPay);
+export const markDriverPaid = withFleet(fleetService.markDriverPaid);
+export const recordCashRemittance = withFleet(fleetService.recordCashRemittance);
+export const getFinanceReport = onCall({ enforceAppCheck: true, secrets: [IP_HASH_SALT], memory: '512MiB', timeoutSeconds: 120 }, async (req) => {
+  try {
+    return await getFinanceReportService({ fleet: fleetStore, now: () => new Date() }, callerFromToken(req.auth), req.data);
+  } catch (e) {
+    throw toHttpsError(e);
+  }
+});
+
+/** 03:17 Accra time: reload the last three days into BigQuery (only when BIGQUERY_EXPORT=on). */
+export const exportAnalytics = onSchedule({ schedule: '17 3 * * *', timeZone: 'Africa/Accra', timeoutSeconds: 540, memory: '512MiB' }, async () => {
+  if (BIGQUERY_EXPORT.value() !== 'on') return;
+  console.log('BigQuery export', await exportRecentDays(new FirestoreExportSource(db), new LiveBigQuery(), new Date(), 3));
 });

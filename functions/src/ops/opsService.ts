@@ -6,7 +6,8 @@ import {
   dispatchActionSchema,
   driverActionSchema,
   issuesToFieldErrors,
-  startShiftSchema,
+  startShiftOdometerSchema,
+  endShiftSchema,
   uploadRequestSchema,
   vehicleSchema,
 } from '@courier/validation';
@@ -16,6 +17,8 @@ import { randomId } from '../lib/hash.js';
 import type { BookingRecord } from '../store/types.js';
 import { buildDelivery, decideDispatch, decideDriverAction, type Site } from './decisions.js';
 import type { EvidenceStore, LivePort, OpsStore } from './types.js';
+import type { FleetStore } from '../fleet/types.js';
+import { checkVehicleForShift, shiftEnded, shiftEnding, shiftStarted } from '../fleet/fleetService.js';
 
 export interface OpsDeps {
   ops: OpsStore;
@@ -26,6 +29,8 @@ export interface OpsDeps {
   newOtp: () => string;
   site: Site;
   uploads: { workerUrl: string; secret: string };
+  /** Phase 6: shift history, odometer readings and vehicle-document checks. */
+  fleet?: FleetStore;
 }
 
 export const DISPATCH_ROLES: Role[] = ['dispatcher', 'admin', 'super_admin'];
@@ -118,8 +123,9 @@ export async function driverAction(deps: OpsDeps, caller: Caller, raw: unknown):
 
 export async function startShift(deps: OpsDeps, caller: Caller, raw: unknown): Promise<NonNullable<DriverDoc['currentShift']>> {
   requireRole(caller, ['driver']);
-  const { vehicleId } = parse(startShiftSchema, raw);
+  const { vehicleId, odometerKm } = parse(startShiftOdometerSchema, raw, 'Check the shift details.');
   const now = deps.now();
+  if (deps.fleet) await checkVehicleForShift({ fleet: deps.fleet, now: deps.now }, vehicleId, odometerKm);
   const res = await deps.ops.startShift(caller.uid, vehicleId, (driver, vehicle) => ({
     id: `sh_${deps.newId()}`,
     vehicleId: vehicle.id,
@@ -139,12 +145,17 @@ export async function startShift(deps: OpsDeps, caller: Caller, raw: unknown): P
   }
   // Authorise location writes (RTDB rules check this); safe to repeat if the app retries.
   await deps.live.setShift(caller.uid, { shiftId: res.shift.id, activeUntilMs: new Date(res.shift.activeUntil).getTime() });
+  if (deps.fleet && res.shift.startedAt === now.toISOString()) await shiftStarted({ fleet: deps.fleet }, caller.uid, res.shift, odometerKm);
   return res.shift;
 }
 
-export async function endShift(deps: OpsDeps, caller: Caller): Promise<{ ended: boolean }> {
+export async function endShift(deps: OpsDeps, caller: Caller, raw: unknown = {}): Promise<{ ended: boolean }> {
   requireRole(caller, ['driver']);
+  const { odometerKm } = parse(endShiftSchema, raw ?? {}, 'Check the odometer reading.');
+  const shift = deps.fleet ? (await deps.ops.getDriver(caller.uid))?.currentShift ?? null : null;
+  if (deps.fleet && shift) await shiftEnding({ fleet: deps.fleet }, shift, odometerKm);
   const r = await deps.ops.endShift(caller.uid);
+  if (deps.fleet && shift && r === 'ended') await shiftEnded({ fleet: deps.fleet, now: deps.now }, shift.id, odometerKm);
   if (r === 'holding_packages') {
     throw new AppError('SHIFT_ACTIVE', 'You still have packages or active jobs. Complete them or contact dispatch before ending your shift.');
   }

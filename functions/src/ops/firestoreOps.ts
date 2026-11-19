@@ -104,7 +104,13 @@ export class FirestoreOpsStore implements OpsStore {
       if (m.podSecret === null) tx.delete(podRef);
       else if (m.podSecret) tx.set(podRef, m.podSecret);
       if (m.pod) tx.set(this.col('proofOfDelivery').doc(m.pod.kind === 'return' ? `${deliveryId}_return` : deliveryId), m.pod);
-      if (m.payment) tx.create(this.col('payments').doc(m.payment.id), m.payment);
+      if (m.payment) {
+        tx.create(this.col('payments').doc(m.payment.id), m.payment);
+        // Cash a driver collects is owed to the company until handed in (Phase 6 cash ledger).
+        if (m.payment.provider === 'cash' && m.payment.collectedBy) {
+          tx.set(this.col('driverCash').doc(m.payment.collectedBy), { driverUid: m.payment.collectedBy, collectedPesewas: FieldValue.increment(m.payment.amountPesewas) }, { merge: true });
+        }
+      }
       for (const e of m.events ?? []) tx.create(this.col('trackingEvents').doc(), e);
       for (const n of m.notifications ?? []) tx.create(this.col('notifications').doc(), notificationDoc(n));
       for (const a of m.audit ?? []) tx.create(this.col('auditLogs').doc(), { ...a, at: FieldValue.serverTimestamp() });

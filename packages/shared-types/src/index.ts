@@ -6,3 +6,4 @@ export * from './payments.js';
 export * from './tracking.js';
 export * from './operations.js';
 export * from './business.js';
+export * from './fleet.js';

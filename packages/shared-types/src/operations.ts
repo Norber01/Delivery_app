@@ -144,6 +144,15 @@ export interface VehicleDoc {
   homeServiceAreaId: string;
   status: VehicleStatus;
   currentDriverUid: string | null;
+  /** Phase 6: highest odometer reading recorded (shift start/end, fuel, service). */
+  odometerKm?: number;
+  /** Phase 6: service schedule and legal documents. */
+  serviceIntervalKm?: number | null;
+  serviceIntervalDays?: number | null;
+  lastServiceAt?: IsoDateString | null;
+  lastServiceKm?: number | null;
+  insuranceExpiry?: IsoDateString | null;
+  roadworthyExpiry?: IsoDateString | null;
 }
 
 export interface DriverShift {
