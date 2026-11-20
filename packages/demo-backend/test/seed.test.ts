@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { demoReady, theDb } from '../src/runtime/core.js';
+import { demoReady, theDb, withClock } from '../src/runtime/core.js';
+import { allPositions } from '../src/runtime/live.js';
+import { keepDriversOnShift } from '../src/runtime/start.js';
 import { callAs } from '../src/runtime/wiring.js';
 import type { FinanceReport } from '@courier/shared-types';
 
@@ -32,5 +34,21 @@ describe('demo sample data', () => {
     const r = await callAs<{ month: string; bookings: number }>('d_adwoa', 'getBusinessReport', { month: new Date().toISOString().slice(0, 7) });
     expect(r.bookings).toBeGreaterThan(0);
     await expect(callAs('d_ama', 'getFinanceReport', { period: '2026-11' })).rejects.toMatchObject({ code: 'functions/permission-denied' });
+  });
+
+  it('puts the sample drivers back on shift when the demo is opened again the next day', async () => {
+    const tomorrow = new Date(Date.now() + 20 * 3600_000);
+    const onShift = (uid: string) => {
+      const s = (theDb().get(`drivers/${uid}`) as { currentShift?: { activeUntil: string } | null }).currentShift;
+      return !!s && Date.parse(s.activeUntil) > tomorrow.getTime();
+    };
+    expect(onShift('d_kwame')).toBe(false);
+    await withClock(tomorrow, async () => {
+      expect(Object.keys(allPositions())).toEqual([]);
+      await keepDriversOnShift();
+      expect(Object.keys(allPositions()).sort()).toEqual(['d_esi', 'd_kojo', 'd_kwame']);
+    });
+    expect(['d_kwame', 'd_esi', 'd_kojo'].every(onShift)).toBe(true);
+    expect(onShift('d_yaw')).toBe(false); // was never on shift in the sample data
   });
 });

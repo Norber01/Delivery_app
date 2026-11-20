@@ -1,5 +1,5 @@
 import { Buffer } from 'buffer';
-import { theDb } from './core.js';
+import { demoNow, theDb } from './core.js';
 import { installFetchInterceptor } from './evidence.js';
 import { searchPlaces } from './places.js';
 
@@ -16,6 +16,7 @@ export async function start() {
     await seed(new Date());
     db.flush();
   }
+  await keepDriversOnShift();
   if (typeof window !== 'undefined') {
     const { callAs } = await import('./wiring.js');
     const { DRIVERS } = await import('./seed.js');
@@ -35,4 +36,27 @@ export async function start() {
     };
   }
   if (typeof document !== 'undefined') (await import('./banner.js')).mountBanner();
+  // A page left open past a shift's end keeps its drivers too.
+  if (typeof window !== 'undefined') setInterval(() => void keepDriversOnShift(), 60_000);
+}
+
+/**
+ * Real shifts end after 12 hours, so sample drivers whose shift ran out (the demo was first
+ * opened yesterday) would vanish from the maps and the driver lists. Start a new shift on the same
+ * vehicle for each of them. Drivers whose shift was ended on purpose (no current shift) stay off.
+ */
+export async function keepDriversOnShift() {
+  const { callAs } = await import('./wiring.js');
+  const { DRIVERS } = await import('./seed.js');
+  const now = demoNow().getTime();
+  for (const { uid } of DRIVERS) {
+    const shift = (theDb().get(`drivers/${uid}`) as { currentShift?: { vehicleId: string; activeUntil: string } | null } | undefined)?.currentShift;
+    if (!shift || Date.parse(shift.activeUntil) > now) continue;
+    try {
+      await callAs(uid, 'startShift', { vehicleId: shift.vehicleId });
+    } catch {
+      /* e.g. the vehicle was taken or sent for maintenance: leave this driver off shift */
+    }
+  }
+  theDb().flush();
 }
