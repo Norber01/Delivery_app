@@ -15,6 +15,7 @@ import { ExpensesPage } from './pages/ExpensesPage';
 import { DriverPayPage } from './pages/DriverPayPage';
 import { AnalyticsPage } from './pages/AnalyticsPage';
 import { DriverDemoPage } from './pages/DriverDemoPage';
+import { RiderAppPage } from './pages/RiderAppPage';
 
 const DEMO = import.meta.env.VITE_DEMO === 'true';
 import { NetworkPage } from './pages/NetworkPage';
@@ -175,6 +176,8 @@ function Guard({ allow, children }: { allow: (r: ReturnType<typeof useStaffAuth>
 }
 
 const router = createBrowserRouter([
+  // Demo only: the rider app, outside the staff screens (riders sign in with their own account).
+  ...(DEMO ? [{ path: '/rider', element: <RiderAppPage /> }] : []),
   {
     element: <Shell />,
     children: [

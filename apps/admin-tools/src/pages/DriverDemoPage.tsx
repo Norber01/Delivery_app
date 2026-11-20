@@ -6,12 +6,13 @@ import { getFirebase } from '../lib/firebase';
 import { useQuery } from '../lib/useLive';
 
 /** Provided by the demo runtime (demo builds only). */
-interface DemoApi {
+export interface DemoApi {
   drivers: { uid: string; name: string; area: string; riderType?: 'pickup' | 'delivery' }[];
   callAs: <T>(uid: string, fn: string, data: unknown) => Promise<T>;
+  signInRider: (email: string, password: string) => { uid: string; name: string };
   latestCode: (trackingNumber: string) => string | null;
 }
-const demo = () => (window as unknown as { __courierDemo?: DemoApi }).__courierDemo;
+export const demo = () => (window as unknown as { __courierDemo?: DemoApi }).__courierDemo;
 const BUSY = ['assigned', 'en_route_to_pickup', 'picked_up', 'at_destination_hub', 'out_for_delivery', 'delivery_failed', 'returning_to_sender'];
 let n = 0;
 const actionId = () => `demo-web-${Date.now()}-${++n}`.replace(/[^A-Za-z0-9_-]/g, '').padEnd(16, '0');
@@ -22,17 +23,24 @@ const actionId = () => `demo-web-${Date.now()}-${++n}`.replace(/[^A-Za-z0-9_-]/g
  */
 export function DriverDemoPage() {
   const api = demo();
+  const { db } = getFirebase();
+  // From the database, so riders added on "Riders & vehicles" appear too.
+  const riders = useQuery<DriverDoc>(query(collection(db, 'drivers'), where('status', '==', 'active')), []);
   const [uid, setUid] = useState(api?.drivers[0]?.uid ?? '');
   if (!api) return <p className="p-8 text-slate-600">This page only exists in the demo.</p>;
   return (
     <main className="mx-auto max-w-md space-y-4 p-4">
       <div className="rounded-2xl bg-brand-50 p-3 text-sm">
-        Demo: this screen stands in for the riders’ Android app. Pick a rider and walk a parcel through: the pickup rider brings it to the warehouse, the delivery rider takes it to the recipient. The website and the Orders board update live.
+        Demo: this screen stands in for the riders’ Android app (riders can also sign in on their own: demo bar → Sign in as… → Riders). Pick a rider and walk a parcel through: the pickup rider brings it to the warehouse, the delivery rider takes it to the recipient. The website and the Orders board update live.
       </div>
       <label className="block text-sm font-medium">
         Rider
         <select className="input mt-1" value={uid} onChange={(e) => setUid(e.target.value)} aria-label="Driver">
-          {api.drivers.map((d) => <option key={d.uid} value={d.uid}>{d.name} — {d.riderType === 'pickup' ? 'pickup rider' : d.riderType === 'delivery' ? 'delivery rider' : 'rider'} ({d.area})</option>)}
+          {(riders.data.length ? riders.data.map((d) => ({ uid: d.uid, name: d.name, riderType: d.riderType, area: d.homeServiceAreaId })) : api.drivers).map((d) => (
+            <option key={d.uid} value={d.uid}>
+              {d.name} — {d.riderType === 'pickup' ? 'pickup rider' : d.riderType === 'delivery' ? 'delivery rider' : 'rider'} ({d.area})
+            </option>
+          ))}
         </select>
       </label>
       {uid && <DriverPhone key={uid} uid={uid} api={api} />}
@@ -40,7 +48,7 @@ export function DriverDemoPage() {
   );
 }
 
-function DriverPhone({ uid, api }: { uid: string; api: DemoApi }) {
+export function DriverPhone({ uid, api, onSignOut }: { uid: string; api: DemoApi; onSignOut?: () => void }) {
   const { db } = getFirebase();
   const [driver, setDriver] = useState<DriverDoc | null>(null);
   const [plan, setPlan] = useState<RoutePlanDoc | null>(null);
@@ -79,7 +87,14 @@ function DriverPhone({ uid, api }: { uid: string; api: DemoApi }) {
           <h1 className="text-lg font-extrabold">{driver?.name ?? '…'}</h1>
           {driver?.riderType && <p className="text-xs font-semibold text-slate-500">{driver.riderType === 'pickup' ? 'Pickup rider' : 'Delivery rider'}</p>}
         </div>
-        <span className={`chip ${onShift ? 'bg-emerald-100 text-emerald-800' : 'bg-white text-slate-600'}`}>{onShift ? `On shift · ${driver?.currentShift?.vehicleClass}` : 'Off shift'}</span>
+        <div className="flex flex-col items-end gap-1">
+          <span className={`chip ${onShift ? 'bg-emerald-100 text-emerald-800' : 'bg-white text-slate-600'}`}>{onShift ? `On shift · ${driver?.currentShift?.vehicleClass}` : 'Off shift'}</span>
+          {onSignOut && (
+            <button className="text-xs font-semibold text-slate-500 underline-offset-2 hover:underline" onClick={onSignOut}>
+              Sign out
+            </button>
+          )}
+        </div>
       </header>
       {msg && <p role="status" className={`text-sm ${msg.ok ? 'text-green-700' : 'text-red-700'}`}>{msg.text}</p>}
       {!onShift ? (

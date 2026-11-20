@@ -1,5 +1,5 @@
 import { Buffer } from 'buffer';
-import { demoNow, theDb } from './core.js';
+import { demoNow, findAccount, theDb } from './core.js';
 import { installFetchInterceptor } from './evidence.js';
 import { searchPlaces } from './places.js';
 
@@ -24,6 +24,13 @@ export async function start() {
     (window as unknown as { __courierDemo: unknown }).__courierDemo = {
       drivers: DRIVERS,
       callAs,
+      /** The rider app's sign-in (email + password), without touching the staff app's session. */
+      signInRider(email: string, password: string): { uid: string; name: string } {
+        const a = findAccount({ email: email.trim().toLowerCase() });
+        if (!a || a.password !== password) throw new Error('Wrong email or password.');
+        if (a.claims.role !== 'driver') throw new Error('This account is not a rider account.');
+        return { uid: a.uid, name: a.displayName ?? a.email ?? a.uid };
+      },
       /** The delivery code texted to the recipient (the demo shows it so you can complete deliveries). */
       latestCode(trackingNumber: string) {
         const bodies = db

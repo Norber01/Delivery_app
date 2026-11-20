@@ -27,7 +27,10 @@ visitors — each browser has its own copy of the sample data. **Reset** in the 
 7. **Rider phone (demo)** → Esi → enter the code shown → *Complete delivery*.
 8. In another tab: the website's **Track** page shows Booked → Picked up → At warehouse → On the way → Delivered.
 9. **Reports**, **Rider pay & cash**, **Expenses**, **Riders & vehicles** show the sample history; **Excel backup** downloads everything as an .xlsx file.
-10. **Sign in as… → Adwoa Frimpong** for the business dashboard (bulk upload, invoices, reports).
+10. **Rider app** (yellow demo bar): what a rider sees on their own phone — sign in as
+    `kwame@demo.gh` (pickup) or `esi@demo.gh` (delivery) with `demo1234`. Riders you add on
+    **Riders & vehicles** can sign in here too, with `demo1234`.
+11. **Sign in as… → Adwoa Frimpong** for the business dashboard (bulk upload, invoices, reports).
 
 ## Publishing (one time, from a phone)
 

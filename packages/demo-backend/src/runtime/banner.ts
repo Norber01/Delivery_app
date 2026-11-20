@@ -62,6 +62,7 @@ export function mountBanner() {
     el('button', { type: 'button', 'data-panel': 'who' }, 'Sign in as…'),
     smsBtn,
     el('a', { class: 'btn', href: isOps ? WEB : OPS }, isOps ? 'Website' : 'Ops app'),
+    el('a', { class: 'btn', href: `${OPS}rider` }, 'Rider app'),
     el('button', { type: 'button', 'data-panel': 'reset' }, 'Reset'),
   );
   root.append(bar, panel);
@@ -80,6 +81,12 @@ export function mountBanner() {
     panel.replaceChildren();
     if (open === 'who') {
       const grid = el('div', { class: 'who' });
+      const riders = el('div', { class: 'who' });
+      for (const d of DRIVERS) {
+        const b = el('button', { type: 'button' }, el('strong', {}, d.name), el('small', {}, d.riderType === 'pickup' ? 'Pickup rider — collects parcels, brings them to the warehouse' : 'Delivery rider — takes parcels from the warehouse to recipients'), el('small', {}, d.email));
+        b.onclick = () => (location.href = `${OPS}rider?as=${d.uid}`);
+        riders.append(b);
+      }
       for (const p of PEOPLE) {
         const staff = !['customer'].includes(p.role);
         const b = el('button', { type: 'button' }, el('strong', {}, p.name), el('small', {}, p.what), el('small', {}, p.email));
@@ -90,7 +97,9 @@ export function mountBanner() {
         el('h3', {}, 'Sign in as a sample person'),
         el('p', {}, el('small', {}, `Or use the normal sign-in pages: every sample password is "${DEMO_PASSWORD}", and phone codes are always 123456.`)),
         grid,
-        el('p', {}, el('small', {}, `Drivers (${DRIVERS.map((d) => d.name).join(', ')}) use the Android app; in the demo you play them from the ops app → "Driver phone".`)),
+        el('h3', {}, 'Riders (the rider app)'),
+        el('p', {}, el('small', {}, 'In real life riders use the Android app on their own phone. Here it opens as a phone screen in this browser.')),
+        riders,
       );
     } else if (open === 'sms') {
       const rows = theDb()

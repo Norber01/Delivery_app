@@ -133,16 +133,23 @@ Then, once:
    **Staff** → enter their email, choose the role (dispatcher, hub operator, fleet manager,
    finance…) → **Give access**.
 
-## 7. Driver app (Android)
+## 7. Rider app (Android)
 
-1. In the ops app → **Fleet**, add each driver (name, phone, email) and vehicle. The page shows
-   a one-time link for the driver to set their password — send it to them (WhatsApp/SMS).
-2. Put the drivers' emails in the `DRIVER_TESTERS` variable (step 3.3).
+How a rider gets the app on their own phone:
+
+1. In the staff app → **Riders & vehicles** → **Add a rider**: choose **Pickup rider** or
+   **Delivery rider**, then name, phone and email. The page shows a one-time link for the rider
+   to set their own password — send it to them (WhatsApp/SMS). Add the vehicles on the same page.
+2. Put the riders' emails in the `DRIVER_TESTERS` variable (step 3.3), separated by commas.
 3. **Actions** → **Driver app (Android)** → **Run workflow** → environment, distribution
    **phones** → **Run** (about 20–25 minutes).
-4. Each driver receives an email from Firebase App Distribution: on their Android phone they tap
+4. Each rider receives an email from Firebase App Distribution: on their Android phone they tap
    **Get started** → **Download**, and allow installing from that source when asked. Later
    builds arrive the same way and install over the old version.
+5. The rider opens **{company} Rider**, signs in with their email and the password they set,
+   taps **Start shift** (chooses their vehicle), and their jobs appear as dispatch assigns them.
+   A new rider later: add them (step 1), add their email to `DRIVER_TESTERS`, run the workflow
+   again — or, once the app is on Google Play internal testing (below), just invite them there.
 
 The first build creates the app's signing key and keeps it in your Google project (Secret
 Manager → `DRIVER_UPLOAD_KEYSTORE`). Never delete it: updates must be signed with the same key.

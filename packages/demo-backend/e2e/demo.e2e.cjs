@@ -174,6 +174,15 @@ const check = (c, what) => { if (!c) throw new Error(`CHECK FAILED: ${what}`); l
   await deep.waitForSelector('a[href*="/track/"]', { timeout: 20000 });
   check((await deep.locator('a[href*="/track/"]').count()) > 0, 'customer sees their bookings');
 
+  // 7b. Rider app: riders sign in with their own email and password (no staff menu).
+  await deep.click('#cdemo a:has-text("Rider app")');
+  await deep.waitForSelector('section[aria-label="Rider sign in"]');
+  await deep.fill('input[type=email]', 'esi@demo.gh');
+  await deep.fill('input[type=password]', 'demo1234');
+  await deep.click('section[aria-label="Rider sign in"] button');
+  await deep.waitForSelector('section[aria-label="Driver phone"] h1:has-text("Esi Owusu")');
+  check((await deep.locator('aside nav').count()) === 0, 'rider signs in to the rider app (no staff screens)');
+
   // 8. Phone width.
   const phone = await browser.newContext({ ...devices['iPhone 13'] });
   const m = await phone.newPage();
