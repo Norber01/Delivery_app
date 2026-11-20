@@ -34,6 +34,7 @@ import { randomInt } from 'node:crypto';
 import { FirestoreOpsStore, RtdbLive, WorkerEvidenceStore } from './ops/firestoreOps.js';
 import {
   createDriverAccount as createDriverAccountService,
+  updateDriver as updateDriverService,
   dispatchAction as dispatchActionService,
   driverAction as driverActionService,
   endShift as endShiftService,
@@ -59,6 +60,7 @@ import type { InvoiceDeps } from './business/invoiceService.js';
 import { FirestoreFleetStore } from './fleet/firestoreFleet.js';
 import * as fleetService from './fleet/fleetService.js';
 import { getFinanceReport as getFinanceReportService } from './fleet/financeService.js';
+import { exportBackup as exportBackupService } from './fleet/backupService.js';
 import { planDriverRoute as planDriverRouteService } from './fleet/routeService.js';
 import { exportRecentDays } from './fleet/bigqueryExport.js';
 import { FirestoreExportSource, LiveBigQuery } from './fleet/bigqueryLive.js';
@@ -330,6 +332,14 @@ export const createDriverAccount = callable([], async (req) => {
   return result;
 });
 
+/** Fleet / dispatch / manager (MFA): change a rider's type (pickup or delivery) or suspend them. */
+export const updateDriver = callable([], async (req) => {
+  const caller = callerFromToken(req.auth);
+  const result = await updateDriverService({ ops: opsStore }, caller, req.data);
+  await store.writeAudit({ actorUid: caller.uid, actorRole: caller.role ?? 'guest', action: 'driver.update', targetType: 'driver', targetId: result.uid, after: req.data });
+  return result;
+});
+
 /** Fleet manager / admin (MFA): add or update a vehicle. */
 export const upsertVehicle = callable([], async (req) => {
   const caller = callerFromToken(req.auth);
@@ -457,6 +467,18 @@ export const recordCashRemittance = withFleet(fleetService.recordCashRemittance)
 export const getFinanceReport = onCall({ enforceAppCheck: true, secrets: [IP_HASH_SALT], memory: '512MiB', timeoutSeconds: 120 }, async (req) => {
   try {
     return await getFinanceReportService({ fleet: fleetStore, now: () => new Date() }, callerFromToken(req.auth), req.data);
+  } catch (e) {
+    throw toHttpsError(e);
+  }
+});
+
+/** Manager / finance / admin (MFA): Excel backup of a date range (audited: it contains customer data). */
+export const exportBackup = onCall({ enforceAppCheck: true, secrets: [IP_HASH_SALT], memory: '1GiB', timeoutSeconds: 300 }, async (req) => {
+  try {
+    const caller = callerFromToken(req.auth);
+    const result = await exportBackupService({ fleet: fleetStore, now: () => new Date() }, caller, req.data);
+    await store.writeAudit({ actorUid: caller.uid, actorRole: caller.role ?? 'guest', action: 'backup.export', targetType: 'backup', targetId: `${result.from}..${result.to}`, after: { rows: result.sheets.map((s) => `${s.name}: ${s.rows.length}`) } });
+    return result;
   } catch (e) {
     throw toHttpsError(e);
   }

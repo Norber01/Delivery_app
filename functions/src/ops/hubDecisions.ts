@@ -53,17 +53,23 @@ export function decideHubReceive(ctx: OpsContext, hubId: string, actor: Actor): 
   if (d.status === 'picked_up' && leg?.type === 'first_mile') {
     if (d.originHub?.id !== hubId) throw wrongHub(d.originHub?.name);
     const next = nextLegId(d);
+    // Same-city warehouse: the next leg is the delivery rider's, so it waits for one here.
+    const toDeliveryRider = d.legs.find((l) => l.id === next)?.type === 'last_mile';
     return {
       ...(ctx.assignment ? { assignmentUpdate: { status: 'completed', endedAt: ctx.now } } : {}),
       delivery: {
-        status: 'at_origin_hub',
+        status: toDeliveryRider ? 'at_destination_hub' : 'at_origin_hub',
         custodian: { type: 'hub', id: hubId },
         legs: setLeg({ ...d, legs: setLeg(d, leg.id, { status: 'completed' }) }, next, { status: 'planned' }),
         currentLegId: next,
         currentAssignmentId: null,
         currentDriverUid: null,
       },
-      events: [ev(d, ctx.now, 'hub_in', `Arrived at our ${d.originHub.city} hub`, actor, { internalNote: `Received at ${d.originHub.code} from first-mile driver` })],
+      events: [
+        ev(d, ctx.now, 'hub_in', toDeliveryRider ? `At our ${d.originHub.city} warehouse` : `Arrived at our ${d.originHub.city} hub`, actor, {
+          internalNote: `Received at ${d.originHub.code} from pickup rider`,
+        }),
+      ],
       audit: [audit(actor, 'hub.receive', 'delivery', d.id, { hubId, from: 'first_mile' })],
     };
   }

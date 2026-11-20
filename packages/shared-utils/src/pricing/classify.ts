@@ -43,12 +43,15 @@ export function classifyDelivery(
   if (destinationArea && destinationArea.id === pickupArea.id) {
     return { deliveryType: 'intra_city', pickupArea, destinationArea, route: null };
   }
-  if (destinationArea) {
+  if (destinationArea && rules.intercity.enabled !== false) {
     const route = findRoute(rules, pickupArea.id, destinationArea.id);
     if (route) return { deliveryType: 'intercity', pickupArea, destinationArea, route };
   }
   if (rules.longDistance.enabled) {
     return { deliveryType: 'long_distance', pickupArea, destinationArea, route: null };
+  }
+  if (rules.intercity.enabled === false) {
+    throw new PricingError('DESTINATION_NOT_SERVICED', `For now we only deliver within ${pickupArea.name}. Choose a destination in the same city.`);
   }
   throw new PricingError('DESTINATION_NOT_SERVICED', 'We do not yet deliver to this destination.');
 }

@@ -75,7 +75,7 @@ export function decideRefundUpdate(
 
 /** Finance/admin (MFA) refunds a captured payment, capped at the remaining refundable amount. */
 export async function requestRefund(deps: PaymentDeps, caller: Caller, raw: unknown): Promise<RefundResponse> {
-  requireRole(caller, ['finance', 'admin', 'super_admin']);
+  requireRole(caller, ['finance', 'manager', 'admin', 'super_admin']);
   const parsed = refundRequestSchema.safeParse(raw);
   if (!parsed.success) {
     throw new AppError('VALIDATION_FAILED', 'Invalid refund request.', 'invalid-argument', issuesToFieldErrors(parsed.error));

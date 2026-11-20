@@ -1,8 +1,6 @@
-import { VEHICLE_RANK, type DeliveryStatus } from '@courier/constants';
+import { RIDER_TYPE_LABELS, VEHICLE_RANK, type DeliveryStatus, type RiderType } from '@courier/constants';
 import type { DeliveryDoc, DriverDoc, DriverLocation, LocationFreshness } from '@courier/shared-types';
 import { distanceMeters, locationFreshness } from '@courier/shared-utils';
-
-export type BoardColumn = 'needs_driver' | 'in_progress' | 'exceptions';
 
 export const ACTIVE_STATUSES: DeliveryStatus[] = [
   'awaiting_assignment',
@@ -19,12 +17,33 @@ export const ACTIVE_STATUSES: DeliveryStatus[] = [
   'at_destination_hub',
 ];
 
+/**
+ * The order board, left to right, follows the parcel:
+ * needs a pickup rider → being picked up → at the warehouse (needs / waiting for a delivery rider)
+ * → out for delivery; anything that went wrong is under "Problems".
+ */
+export type BoardColumn = 'needs_pickup' | 'picking_up' | 'at_warehouse' | 'delivering' | 'problems';
+
+export const COLUMN_TITLE: Record<BoardColumn, string> = {
+  needs_pickup: 'Needs pickup rider',
+  picking_up: 'Being picked up',
+  at_warehouse: 'At warehouse',
+  delivering: 'Out for delivery',
+  problems: 'Problems',
+};
+
 export function columnFor(d: Pick<DeliveryDoc, 'status' | 'openException'> & Partial<Pick<DeliveryDoc, 'currentAssignmentId'>>): BoardColumn {
-  if (d.status === 'pickup_failed' || d.status === 'delivery_failed' || d.status === 'on_hold' || d.openException) return 'exceptions';
-  if (d.status === 'awaiting_assignment') return 'needs_driver';
-  // Intercity parcel at the destination hub with no last-mile driver yet.
-  if (d.status === 'at_destination_hub' && !d.currentAssignmentId) return 'needs_driver';
-  return 'in_progress';
+  if (d.status === 'pickup_failed' || d.status === 'delivery_failed' || d.status === 'on_hold' || d.openException) return 'problems';
+  if (d.status === 'awaiting_assignment') return 'needs_pickup';
+  if (d.status === 'assigned' || d.status === 'en_route_to_pickup' || d.status === 'picked_up') return 'picking_up';
+  if (d.status === 'at_origin_hub' || d.status === 'at_destination_hub' || d.status === 'in_transit') return 'at_warehouse';
+  return 'delivering';
+}
+
+/** Which kind of rider the delivery needs next (null: a rider of either type, or none). */
+export function riderNeeded(d: Pick<DeliveryDoc, 'legs' | 'currentLegId'>): RiderType | null {
+  const leg = d.legs.find((l) => l.id === d.currentLegId)?.type;
+  return leg === 'first_mile' ? 'pickup' : leg === 'last_mile' ? 'delivery' : null;
 }
 
 export interface DriverOption {
@@ -47,6 +66,7 @@ export function rankDrivers(
   locations: Record<string, DriverLocation>,
   activeJobs: Record<string, number>,
   nowMs: number,
+  riderType: RiderType | null = null,
 ): DriverOption[] {
   const options = drivers.map((driver): DriverOption => {
     const shift = driver.currentShift;
@@ -54,6 +74,7 @@ export function rankDrivers(
     const usableLoc = loc && shift && loc.shiftId === shift.id ? loc : null;
     let reason: string | null = null;
     if (driver.status !== 'active') reason = 'Suspended';
+    else if (riderType && driver.riderType && driver.riderType !== riderType) reason = RIDER_TYPE_LABELS[driver.riderType];
     else if (!shift || new Date(shift.activeUntil).getTime() <= nowMs) reason = 'Not on shift';
     else if (shift.serviceAreaId !== delivery.serviceAreaId) reason = 'Different service area';
     else if (delivery.requiredVehicleClass && VEHICLE_RANK[shift.vehicleClass] < VEHICLE_RANK[delivery.requiredVehicleClass]) {

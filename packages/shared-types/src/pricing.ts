@@ -64,6 +64,8 @@ export interface PricingRuleSet {
     rates: Partial<Record<VehicleClass, DistanceRate>>;
   };
   intercity: {
+    /** false = deliveries between cities are switched off (same city only). Absent = on. */
+    enabled?: boolean;
     routes: IntercityRoutePrice[];
   };
   weight: {

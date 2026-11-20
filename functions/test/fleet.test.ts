@@ -5,6 +5,7 @@ import { AppError } from '../src/lib/errors.js';
 import { dispatchAction, driverAction, endShift, ensureDeliveryForBooking, startShift, type OpsDeps } from '../src/ops/opsService.js';
 import { exportRecentDays, TABLES, type BqRow } from '../src/fleet/bigqueryExport.js';
 import { buildFinanceReport, getFinanceReport } from '../src/fleet/financeService.js';
+import { exportBackup } from '../src/fleet/backupService.js';
 import {
   adjustDriverPay,
   approveDriverPay,
@@ -268,6 +269,40 @@ describe('finance report', () => {
     data.bookings[0]!.paymentStatus = 'unpaid';
     const r = buildFinanceReport('2026-11', data, await fleet.ledgerTotals(), w.clock.now);
     expect(r.checks.find((c) => c.name.startsWith('Delivered parcels'))).toMatchObject({ ok: false, actualPesewas: 0, expectedPesewas: a.total });
+  });
+});
+
+describe('Excel backup', () => {
+  const manager: Caller = { uid: 'mgr', role: 'manager', businessId: null, mfa: true };
+  it('gives the manager every order with its riders, customers, cash and costs for a date range', async () => {
+    await startShift(deps, kwame, { vehicleId: 'bike1', odometerKm: 1_000 });
+    const a = await cashJob();
+    await deliver(a.trackingNumber);
+    await w.book(GUEST, 'cash_on_pickup');
+    await logFuel(fdeps, kwame, { litres: 4, amountPesewas: 6_000, odometerKm: 1_010, fullTank: true });
+    await recordCashRemittance(fdeps, finance, { driverUid: 'kwame', amountPesewas: a.total, method: 'cash', reference: 'Safe' });
+
+    const day = w.clock.now.toISOString().slice(0, 10);
+    const wb = await exportBackup({ fleet, now: () => w.clock.now }, manager, { from: day, to: day });
+    const get = (name: string) => wb.sheets.find((s) => s.name === name)!;
+    expect(wb.sheets.map((s) => s.name)).toEqual(['Orders', 'Customers', 'Payments', 'Riders', 'Rider cash hand-ins', 'Rider pay', 'Expenses', 'Fuel', 'Shifts']);
+    const orders = get('Orders');
+    expect(orders.rows).toHaveLength(2);
+    const row = Object.fromEntries(orders.columns.map((c, i) => [c, orders.rows.find((r) => r[0] === a.trackingNumber)![i]]));
+    expect(row).toMatchObject({ Status: 'Delivered', 'Price (GH₵)': a.total / 100, 'Payment method': 'Cash to rider', 'Pickup rider': 'Kwame Mensah', 'Delivery rider': 'Kwame Mensah' });
+    expect(get('Customers').rows[0]!.slice(1, 3)).toEqual(['+233241234567', 2]);
+    expect(get('Payments').rows).toEqual([[a.trackingNumber, a.total / 100, 'Cash', 'Kwame Mensah']]);
+    expect(get('Rider cash hand-ins').rows[0]![1]).toBe('Kwame Mensah');
+    expect(get('Fuel').rows[0]!.slice(1, 5)).toEqual(['Kwame Mensah', 'M-22-GR 101', 4, 60]);
+    // Every cell is a plain value Excel can hold.
+    for (const s of wb.sheets) for (const r of s.rows) { expect(r).toHaveLength(s.columns.length); for (const c of r) expect(['string', 'number', 'boolean'].includes(typeof c) || c === null).toBe(true); }
+
+    // Nothing that day before; finance and admins may export; riders and dispatchers may not.
+    const earlier = await exportBackup({ fleet, now: () => w.clock.now }, finance, { from: '2026-01-01', to: '2026-01-31' });
+    expect(earlier.sheets[0]!.rows).toHaveLength(0);
+    await expectCode(exportBackup({ fleet, now: () => w.clock.now }, dispatcher, { from: day, to: day }), 'PERMISSION_DENIED');
+    await expectCode(exportBackup({ fleet, now: () => w.clock.now }, kwame, { from: day, to: day }), 'PERMISSION_DENIED');
+    await expectCode(exportBackup({ fleet, now: () => w.clock.now }, manager, { from: '2026-02-01', to: '2026-01-01' }), 'VALIDATION_FAILED');
   });
 });
 

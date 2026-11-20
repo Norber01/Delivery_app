@@ -12,19 +12,22 @@ showing the product to a client before the real services are set up.
 |---|---|
 | Pricing, quotes, bookings, tracking, dispatch rules, driver actions and delivery codes, hubs and manifests, business accounts, bulk CSV, invoices, route planning, fleet, expenses, driver pay, cash control, the finance report and its checks | The database (saved in the browser, shared between the website and ops app tabs), sign-in (sample accounts; phone codes are always 123456), text messages (shown in the demo bar instead of sent), GPS (drivers move toward their next stop), address search (about 30 well-known places), uploaded photos/documents (kept in the browser) |
 
-Not in the demo: online payment (customers choose "pay the driver"), the Android driver app
-(played on the ops app's **Driver phone (demo)** page), and anything shared between different
+Not in the demo: online payment (customers choose "pay the rider"), the Android rider app
+(played on the ops app's **Rider phone (demo)** page), and anything shared between different
 visitors — each browser has its own copy of the sample data. **Reset** in the demo bar starts over.
 
 ## Showing it to a client (5 minutes)
 
-1. Open the website → **Book a delivery** (search "oxford" and "madina") → confirm with "pay the driver".
-2. In the demo bar: **Sign in as… → Akosua Owusu** (owner). The ops app opens.
-3. **Dispatch** → the new booking → assign **Kwame Mensah**. **Routes** → plan his run.
-4. **Driver phone (demo)** → Kwame → *Start* → *Scan label & collect* → enter the code shown → *Complete delivery*.
-5. In another tab: the website's **Track** page for that parcel shows each step.
-6. **Analytics** → the month's revenue, costs and the six reconciliation checks; **Driver pay**, **Expenses**, **Fleet** show the sample history.
-7. **Sign in as… → Adwoa Frimpong** for the business dashboard (bulk upload, invoices, reports).
+1. Open the website → **Send a parcel** (search "oxford" and "madina") → confirm with "pay the rider".
+2. In the demo bar: **Sign in as… → Kofi Asamoah** (manager). The staff app opens on **Today**.
+3. **Orders** → the new order → assign a **pickup rider** (Kwame Mensah; delivery riders are greyed out).
+4. **Rider phone (demo)** → Kwame → *Start* → *Scan label & collect*.
+5. **Warehouse** → *Receive parcel* → type the tracking number → *Scan*. It now "Needs a delivery rider".
+6. **Orders** → assign a **delivery rider** (Esi Owusu) → **Warehouse** → *Give to rider* → scan.
+7. **Rider phone (demo)** → Esi → enter the code shown → *Complete delivery*.
+8. In another tab: the website's **Track** page shows Booked → Picked up → At warehouse → On the way → Delivered.
+9. **Reports**, **Rider pay & cash**, **Expenses**, **Riders & vehicles** show the sample history; **Excel backup** downloads everything as an .xlsx file.
+10. **Sign in as… → Adwoa Frimpong** for the business dashboard (bulk upload, invoices, reports).
 
 ## Publishing (one time, from a phone)
 

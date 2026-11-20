@@ -135,7 +135,7 @@ describe('dispatch', () => {
     const d = ops.deliveries.get(b.trackingNumber)!;
     expect(d.driverUids).toEqual(['esi']);
     expect(ops.assignments.get(d.currentAssignmentId!)).toMatchObject({ driverUid: 'esi', vehicleId: 'van1', status: 'assigned' });
-    expect(w.store.events.at(-1)).toMatchObject({ type: 'assigned', publicMessage: 'Driver assigned' });
+    expect(w.store.events.at(-1)).toMatchObject({ type: 'assigned', publicMessage: 'Rider assigned' });
   });
 
   it('refuses drivers from another service area and enforces dispatcher scope', async () => {
@@ -387,9 +387,9 @@ describe('fleet administration', () => {
       },
       setDriverClaims: async () => {},
     };
-    const r = await createDriverAccount(deps, identity, fleet, { name: 'Yaw Mensah', phone: '0201112222', email: 'Yaw@Company.gh', employeeNumber: 'DRV-014', homeServiceAreaId: 'accra' });
+    const r = await createDriverAccount(deps, identity, fleet, { name: 'Yaw Mensah', phone: '0201112222', email: 'Yaw@Company.gh', employeeNumber: 'DRV-014', homeServiceAreaId: 'accra', riderType: 'delivery' });
     expect(r.setupLink).toContain('oob');
-    expect(ops.drivers.get('newdriver')).toMatchObject({ phone: '+233201112222', email: 'yaw@company.gh', status: 'active' });
+    expect(ops.drivers.get('newdriver')).toMatchObject({ phone: '+233201112222', email: 'yaw@company.gh', status: 'active', riderType: 'delivery' });
     await expectCode(createDriverAccount(deps, identity, dispatcher, {}), 'PERMISSION_DENIED');
   });
 

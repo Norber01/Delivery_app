@@ -87,3 +87,9 @@ export const cashRemittanceSchema = z.object({
 });
 
 export const financeReportSchema = z.object({ period: periodSchema, refresh: z.boolean().optional() });
+
+const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD');
+/** Excel backup: everything booked, paid or spent from `from` to `to` (inclusive days, UTC). */
+export const backupSchema = z
+  .object({ from: day, to: day })
+  .refine((v) => v.from <= v.to, { message: 'The start date must be before the end date', path: ['to'] });

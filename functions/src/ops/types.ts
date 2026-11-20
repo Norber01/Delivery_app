@@ -123,6 +123,8 @@ export interface OpsStore {
 
   getDriver(uid: string): Promise<DriverDoc | null>;
   createDriver(d: DriverDoc): Promise<void>;
+  /** Change a rider's type or status; false if there is no such rider. */
+  updateDriver(uid: string, patch: Partial<Pick<DriverDoc, 'riderType' | 'status'>>): Promise<boolean>;
   getVehicle(id: string): Promise<VehicleDoc | null>;
   upsertVehicle(v: VehicleDoc): Promise<void>;
   /** Start (or resume the same) shift atomically; returns the shift or a refusal. */
@@ -139,6 +141,8 @@ export interface OpsStore {
   upsertRoute(r: RouteDoc): Promise<void>;
   /** Primary hubs of both areas and the active route between them, or null. */
   findNetworkRoute(originAreaId: string, destinationAreaId: string): Promise<NetworkRoute | null>;
+  /** The area's warehouse (its primary active hub), where pickup riders drop parcels for delivery riders. */
+  findWarehouse(areaId: string): Promise<HubRef | null>;
   createManifest(m: ManifestDoc): Promise<void>;
   getManifest(id: string): Promise<ManifestDoc | null>;
   /**

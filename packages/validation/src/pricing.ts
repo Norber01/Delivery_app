@@ -41,6 +41,7 @@ export const pricingRuleSetSchema = z
       rates: ratesFor(distanceRate),
     }),
     intercity: z.object({
+      enabled: z.boolean().optional(),
       routes: z
         .array(
           z.object({

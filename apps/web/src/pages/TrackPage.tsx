@@ -16,6 +16,39 @@ import { DELIVERY_TYPE_LABEL, PAYMENT_PREFERENCE_LABEL, PAYMENT_RECORD_LABEL, PA
 const ACTIVE = ['assigned', 'en_route_to_pickup', 'picked_up', 'out_for_delivery'];
 const REFRESH_MS = 30_000;
 
+/** The five steps a customer sees; each delivery status maps to the step it has reached. */
+const STEPS = ['Booked', 'Picked up', 'At warehouse', 'On the way', 'Delivered'] as const;
+const STEP_OF: Record<string, number> = {
+  awaiting_assignment: 0,
+  assigned: 0,
+  en_route_to_pickup: 0,
+  pickup_failed: 0,
+  picked_up: 1,
+  at_origin_hub: 2,
+  in_transit: 2,
+  at_destination_hub: 2,
+  out_for_delivery: 3,
+  delivery_failed: 3,
+  returning_to_sender: 3,
+  delivered: 4,
+  returned: 4,
+};
+
+function Steps({ status }: { status: string | null }) {
+  if (status === 'cancelled') return null;
+  const at = STEP_OF[status ?? 'awaiting_assignment'] ?? 0;
+  return (
+    <ol className="grid grid-cols-5 gap-1.5" aria-label="Progress">
+      {STEPS.map((label, i) => (
+        <li key={label} className="space-y-1.5" aria-current={i === at ? 'step' : undefined}>
+          <span className={`block h-1.5 rounded-full ${i <= at ? 'bg-accent-400' : 'bg-slate-200'}`} />
+          <span className={`block text-[11px] leading-tight sm:text-xs ${i === at ? 'font-bold text-black' : i < at ? 'text-slate-700' : 'text-slate-400'}`}>{label}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 function minutesAgo(iso: string) {
   const m = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60_000));
   return m <= 1 ? 'just now' : `${m} min ago`;
@@ -26,17 +59,17 @@ function LiveSection({ view }: { view: TrackingView }) {
   const markers: MapMarker[] = [];
   if (view.mapPoints.pickup) markers.push({ id: 'pickup', kind: 'pickup', label: 'Pickup', ...view.mapPoints.pickup });
   markers.push({ id: 'destination', kind: 'destination', label: view.access === 'full' ? 'Delivery' : `${view.destination.city} area`, ...view.mapPoints.destination });
-  if (loc) markers.push({ id: 'driver', kind: 'driver', label: 'Driver', lat: loc.lat, lng: loc.lng, muted: loc.freshness !== 'live' });
+  if (loc) markers.push({ id: 'driver', kind: 'driver', label: 'Rider', lat: loc.lat, lng: loc.lng, muted: loc.freshness !== 'live' });
   const showMap = Boolean(loc) || ACTIVE.includes(view.deliveryStatus ?? '');
   return (
     <section className="card space-y-3">
       {loc ? (
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <p className="font-semibold">
-            {loc.etaMinutes !== null ? `Driver is about ${loc.etaMinutes} min away` : view.deliveryStatus === 'en_route_to_pickup' ? 'Driver is on the way to pickup' : 'Driver is on the way'}
+            {loc.etaMinutes !== null ? `Rider is about ${loc.etaMinutes} min away` : view.deliveryStatus === 'en_route_to_pickup' ? 'Rider is on the way to pick up' : 'Rider is on the way'}
           </p>
           <p className={`text-sm ${loc.freshness === 'live' ? 'text-brand-700' : 'text-amber-700'}`}>
-            {loc.freshness === 'live' ? `Live · updated ${minutesAgo(loc.updatedAt)}` : `Location last updated ${minutesAgo(loc.updatedAt)} — the driver may have weak signal`}
+            {loc.freshness === 'live' ? `Live · updated ${minutesAgo(loc.updatedAt)}` : `Location last updated ${minutesAgo(loc.updatedAt)} — the rider may have weak signal`}
           </p>
         </div>
       ) : (
@@ -44,8 +77,8 @@ function LiveSection({ view }: { view: TrackingView }) {
           {view.deliveryStatus === 'in_transit' && view.network?.expectedArrivalAtHub
             ? `On the way from our ${view.network.originHub?.city} hub to our ${view.network.destinationHub?.city} hub — expected around ${new Date(view.network.expectedArrivalAtHub).toLocaleString('en-GH', { weekday: 'short', hour: '2-digit', minute: '2-digit' })}.`
             : view.deliveryStatus === 'in_transit' || view.deliveryStatus === 'at_origin_hub' || view.deliveryStatus === 'at_destination_hub'
-              ? 'Your package is moving through our hub network. A driver’s live location appears once it is out for delivery.'
-              : 'The driver’s live location appears here while your package is out for delivery.'}
+              ? 'Your parcel is safe at our warehouse. You will see the delivery rider on the map once it is on the way.'
+              : 'You will see the rider on the map here while they are carrying your parcel.'}
         </p>
       )}
       {showMap && <MapView ariaLabel="Map of your delivery" markers={markers} mapboxToken={config.mapboxPublicToken} height={300} />}
@@ -63,11 +96,11 @@ export function TrackPage() {
     if (v) navigate(`/track/${v}`);
   };
   return (
-    <div className="mx-auto max-w-3xl space-y-6 px-4 py-10">
-      <h1 className="text-3xl font-bold">Track a delivery</h1>
+    <div className="mx-auto max-w-3xl space-y-5 px-4 py-8">
+      <h1 className="text-3xl font-extrabold tracking-tight">Track a parcel</h1>
       <form onSubmit={submit} className="flex gap-2">
         <input
-          className="input font-mono uppercase"
+          className="input font-mono uppercase placeholder:normal-case"
           aria-label="Tracking number"
           placeholder="GH…"
           value={input}
@@ -125,9 +158,10 @@ function TrackingResult({ trackingNumber }: { trackingNumber: string }) {
 
   return (
     <div className="space-y-6">
-      <div className="card space-y-2">
+      <div className="card space-y-3">
         <p className="font-mono text-sm text-slate-500">{view.trackingNumber}</p>
-        <h2 className="text-2xl font-bold">{view.statusLabel}</h2>
+        <h2 className="text-3xl font-extrabold tracking-tight">{view.statusLabel}</h2>
+        {view.bookingStatus !== 'cancelled' && <Steps status={view.deliveryStatus} />}
         <p className="text-slate-600">
           {DELIVERY_TYPE_LABEL[view.deliveryType]} · {view.origin.city} → {view.destination.city}
         </p>
@@ -157,7 +191,7 @@ function TrackingResult({ trackingNumber }: { trackingNumber: string }) {
         <ol className="relative space-y-4 border-l border-slate-200 pl-6">
           {[...view.timeline].reverse().map((t, i) => (
             <li key={`${t.type}-${t.at}-${i}`}>
-              <span className={`absolute -left-1.5 mt-1.5 h-3 w-3 rounded-full ${i === 0 ? 'bg-brand-600' : 'bg-slate-300'}`} />
+              <span className={`absolute -left-1.5 mt-1.5 h-3 w-3 rounded-full ${i === 0 ? 'bg-accent-400 ring-2 ring-black' : 'bg-slate-300'}`} />
               <p className="font-medium">{t.label}</p>
               <p className="text-xs text-slate-500">{new Date(t.at).toLocaleString('en-GH')}</p>
             </li>

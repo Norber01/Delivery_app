@@ -111,6 +111,12 @@ export class MemoryOpsStore implements OpsStore {
   async createDriver(d: DriverDoc) {
     this.drivers.set(d.uid, clone(d));
   }
+  async updateDriver(uid: string, patch: Partial<Pick<DriverDoc, 'riderType' | 'status'>>) {
+    const d = this.drivers.get(uid);
+    if (!d) return false;
+    this.drivers.set(uid, { ...d, ...clone(patch) });
+    return true;
+  }
   async getVehicle(id: string) {
     const v = this.vehicles.get(id);
     return v ? clone(v) : null;
@@ -158,6 +164,10 @@ export class MemoryOpsStore implements OpsStore {
   }
   async upsertRoute(r: RouteDoc) {
     this.routes.set(r.id, clone(r));
+  }
+  async findWarehouse(areaId: string) {
+    const h = [...this.hubs.values()].find((x) => x.serviceAreaId === areaId && x.primaryForArea && x.active);
+    return h ? { id: h.id, code: h.code, name: h.name, city: h.city, location: h.location } : null;
   }
   async findNetworkRoute(originAreaId: string, destinationAreaId: string): Promise<NetworkRoute | null> {
     const primary = (area: string) => [...this.hubs.values()].find((h) => h.serviceAreaId === area && h.primaryForArea && h.active);

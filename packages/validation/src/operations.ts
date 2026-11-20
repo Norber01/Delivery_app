@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { DISPATCH_ACTIONS, DRIVER_EXCEPTION_REASONS, VEHICLE_CLASSES } from '@courier/constants';
+import { DISPATCH_ACTIONS, DRIVER_EXCEPTION_REASONS, RIDER_TYPES, VEHICLE_CLASSES } from '@courier/constants';
 import { ghanaPhoneSchema, latLngSchema, optional, safeText } from './primitives.js';
 
 const id = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
@@ -64,6 +64,13 @@ export const createDriverSchema = z.object({
   email: z.string().trim().toLowerCase().email().max(254),
   employeeNumber: z.string().trim().regex(/^[A-Za-z0-9-]{2,20}$/, 'Letters, digits and dashes only'),
   homeServiceAreaId: z.string().regex(/^[a-z0-9-]{2,40}$/),
+  riderType: z.enum(RIDER_TYPES, { message: 'Choose pickup rider or delivery rider' }),
+});
+
+export const updateDriverSchema = z.object({
+  uid: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/),
+  riderType: z.enum(RIDER_TYPES).optional(),
+  status: z.enum(['active', 'suspended']).optional(),
 });
 
 export const vehicleSchema = z.object({

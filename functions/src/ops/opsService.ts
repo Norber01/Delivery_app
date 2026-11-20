@@ -3,6 +3,7 @@ import type { DriverActionResponse, DriverDoc, UploadTicket, VehicleDoc } from '
 import { evidenceUrl } from '@courier/shared-utils';
 import {
   createDriverSchema,
+  updateDriverSchema,
   dispatchActionSchema,
   driverActionSchema,
   issuesToFieldErrors,
@@ -33,8 +34,8 @@ export interface OpsDeps {
   fleet?: FleetStore;
 }
 
-export const DISPATCH_ROLES: Role[] = ['dispatcher', 'admin', 'super_admin'];
-export const FLEET_ROLES: Role[] = ['fleet_manager', 'admin', 'super_admin'];
+export const DISPATCH_ROLES: Role[] = ['dispatcher', 'manager', 'admin', 'super_admin'];
+export const FLEET_ROLES: Role[] = ['fleet_manager', 'manager', 'admin', 'super_admin'];
 
 function parse<T>(schema: { safeParse(v: unknown): { success: true; data: T } | { success: false; error: import('zod').ZodError } }, raw: unknown, msg = 'Invalid request.'): T {
   const r = schema.safeParse(raw);
@@ -51,7 +52,9 @@ export async function ensureDeliveryForBooking(deps: Pick<OpsDeps, 'ops' | 'now'
     booking.deliveryType === 'intercity' && booking.destinationAreaId
       ? await deps.ops.findNetworkRoute(booking.pickupAreaId, booking.destinationAreaId)
       : null;
-  return deps.ops.createDelivery(buildDelivery(booking, deps.now(), network));
+  // Same city: through the area's warehouse when one is set up.
+  const warehouse = booking.deliveryType === 'intra_city' ? await deps.ops.findWarehouse(booking.pickupAreaId) : null;
+  return deps.ops.createDelivery(buildDelivery(booking, deps.now(), network, warehouse));
 }
 
 function checkScope(caller: Caller, serviceAreaId: string) {
@@ -181,6 +184,14 @@ export async function createDriverAccount(deps: Pick<OpsDeps, 'ops'>, identity: 
   return { uid, setupLink };
 }
 
+/** Fleet manager / dispatcher / manager: switch a rider between pickup and delivery, or suspend. */
+export async function updateDriver(deps: Pick<OpsDeps, 'ops'>, caller: Caller, raw: unknown) {
+  requireRole(caller, [...new Set([...FLEET_ROLES, ...DISPATCH_ROLES])]);
+  const { uid, ...patch } = parse(updateDriverSchema, raw, 'Check the rider details.');
+  if (!(await deps.ops.updateDriver(uid, patch))) throw new AppError('NOT_FOUND', 'Rider not found.', 'not-found');
+  return { uid };
+}
+
 export async function upsertVehicle(deps: Pick<OpsDeps, 'ops'>, caller: Caller, raw: unknown) {
   requireRole(caller, FLEET_ROLES);
   const input = parse(vehicleSchema, raw, 'Check the vehicle details.');
@@ -233,7 +244,7 @@ export async function requestUpload(deps: OpsDeps, caller: Caller, raw: unknown)
 
 /** Short-lived view URL for a POD photo (ops staff only). */
 export async function getEvidenceUrl(deps: OpsDeps, caller: Caller, raw: unknown): Promise<{ url: string }> {
-  requireRole(caller, ['dispatcher', 'finance', 'fleet_manager', 'admin', 'super_admin']);
+  requireRole(caller, ['dispatcher', 'finance', 'fleet_manager', 'manager', 'admin', 'super_admin']);
   const key = typeof (raw as { key?: unknown })?.key === 'string' ? (raw as { key: string }).key : '';
   const doc = (prefix: string) => new RegExp(`^${prefix}\\/[A-Za-z0-9_-]{1,64}\\/[A-Za-z0-9_-]{8,64}\\.(jpg|png|webp|pdf)$`).test(key);
   // Proof of delivery: dispatch, finance, admin. Business documents: finance, admin.

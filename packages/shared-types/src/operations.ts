@@ -171,6 +171,8 @@ export interface DriverDoc {
   email: string;
   employeeNumber: string;
   homeServiceAreaId: string;
+  /** Pickup or delivery rider; absent on older accounts (may do both). */
+  riderType?: import('@courier/constants').RiderType;
   status: DriverStatus;
   currentShift: DriverShift | null;
 }

@@ -62,3 +62,9 @@ Legend: **C** create · **R** read · **U** update · **D** delete/cancel · `ow
 - `setUserRole` refuses to change the caller's own role and refuses to create a `super_admin` unless two super admins exist (break-glass requires the bootstrap script with service-account access, which is logged in Cloud Audit Logs).
 - Admins cannot grant `admin` or `super_admin`.
 - Token revocation (`revokeRefreshTokens`) is called on every role change so stale claims expire immediately.
+
+## Update: manager role and rider types
+
+- **`manager`** (staff, MFA required): sees everything an administrator sees in the staff app (Today overview, orders, warehouse, riders, money, reports, business customers) and can assign riders, scan at the warehouse and download the Excel backup. It **cannot** give people staff access, change warehouses or areas, or grant roles. Admins can grant it.
+- **Riders** (`driver` role) now have a **rider type** on their profile: `pickup` or `delivery`. Dispatch can only assign a pickup rider to the pickup step and a delivery rider to the delivery step (checked on the server). See [15-order-flow.md](15-order-flow.md).
+- **Excel backup** (`exportBackup`): manager, finance, admin and super admin; every download is written to the audit log.

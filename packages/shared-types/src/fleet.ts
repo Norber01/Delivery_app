@@ -186,3 +186,18 @@ export interface FinanceReport {
   /** Ledger cross-checks; each must be ok for the books to reconcile. */
   checks: { name: string; ok: boolean; expectedPesewas: number; actualPesewas: number; note: string }[];
 }
+
+/** One sheet of the Excel backup: column titles and plain-value rows. */
+export interface BackupSheet {
+  name: string;
+  columns: string[];
+  rows: (string | number | boolean | null)[][];
+}
+
+/** The Excel backup for a date range (returned by `exportBackup`, saved as .xlsx by the ops app). */
+export interface BackupWorkbook {
+  from: string;
+  to: string;
+  createdAt: IsoDateString;
+  sheets: BackupSheet[];
+}

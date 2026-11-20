@@ -5,7 +5,9 @@
 import { deleteApp, initializeApp, type App } from 'firebase-admin/app';
 import { getFirestore, type Firestore } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import rulesJson from '../../firebase/seed/pricing-rules.sample.json' with { type: 'json' };
+import sampleRules from '../../firebase/seed/pricing-rules.sample.json' with { type: 'json' };
+// The sample ships with same-city only; the tests also cover intercity and long distance.
+const rulesJson = { ...sampleRules, intercity: { ...sampleRules.intercity, enabled: true }, longDistance: { ...sampleRules.longDistance, enabled: true } };
 import areasJson from '../../firebase/seed/service-areas.sample.json' with { type: 'json' };
 import { GUEST } from '../src/lib/auth.js';
 import { AppError } from '../src/lib/errors.js';

@@ -28,19 +28,20 @@ export interface DemoPerson {
 /** The accounts listed on the demo's sign-in helper. */
 export const PEOPLE: DemoPerson[] = [
   { uid: 'd_owner', email: 'owner@demo.gh', name: 'Akosua Owusu', role: 'super_admin', what: 'Company owner — everything in the ops app' },
-  { uid: 'd_dispatch', email: 'dispatch@demo.gh', name: 'Yaw Darko', role: 'dispatcher', what: 'Dispatcher — assigns drivers, plans routes' },
-  { uid: 'd_finance', email: 'finance@demo.gh', name: 'Efua Asante', role: 'finance', what: 'Finance — invoices, expenses, driver pay, reports' },
-  { uid: 'd_fleet', email: 'fleet@demo.gh', name: 'Nana Agyei', role: 'fleet_manager', what: 'Fleet manager — vehicles, drivers, maintenance' },
-  { uid: 'd_hub_acc', email: 'hub.accra@demo.gh', name: 'Kwabena Boateng', role: 'hub_operator', what: 'Hub operator — Accra hub', extra: { hubIds: ['acc-01'] } },
-  { uid: 'd_hub_ksi', email: 'hub.kumasi@demo.gh', name: 'Abena Sarpong', role: 'hub_operator', what: 'Hub operator — Kumasi hub', extra: { hubIds: ['ksi-01'] } },
+  { uid: 'd_manager', email: 'manager@demo.gh', name: 'Kofi Asamoah', role: 'manager', what: 'Manager — sees everything: today, orders, warehouse, riders, money, Excel backup' },
+  { uid: 'd_dispatch', email: 'dispatch@demo.gh', name: 'Yaw Darko', role: 'dispatcher', what: 'Dispatcher — assigns pickup and delivery riders' },
+  { uid: 'd_hub_acc', email: 'warehouse@demo.gh', name: 'Kwabena Boateng', role: 'hub_operator', what: 'Warehouse staff — Accra warehouse (scan in / give to rider)', extra: { hubIds: ['acc-01'] } },
+  { uid: 'd_finance', email: 'finance@demo.gh', name: 'Efua Asante', role: 'finance', what: 'Finance — invoices, expenses, rider pay, reports' },
+  { uid: 'd_fleet', email: 'fleet@demo.gh', name: 'Nana Agyei', role: 'fleet_manager', what: 'Fleet manager — riders, vehicles, maintenance' },
   { uid: 'd_ama', email: 'ama@demo.gh', name: 'Ama Mensah', role: 'customer', what: 'Customer — books and tracks parcels', phone: '+233241234567' },
   { uid: 'd_adwoa', email: 'adwoa@demo.gh', name: 'Adwoa Frimpong', role: 'customer', what: 'Business owner — Adwoa Styles (bulk upload, invoices)', phone: '+233244556677' },
 ];
 export const DRIVERS = [
-  { uid: 'd_kwame', email: 'kwame@demo.gh', name: 'Kwame Mensah', phone: '+233244111222', employeeNumber: 'DRV-001', area: 'accra' },
-  { uid: 'd_esi', email: 'esi@demo.gh', name: 'Esi Owusu', phone: '+233244333444', employeeNumber: 'DRV-002', area: 'accra' },
-  { uid: 'd_kojo', email: 'kojo@demo.gh', name: 'Kojo Asante', phone: '+233244555666', employeeNumber: 'DRV-003', area: 'accra' },
-  { uid: 'd_yaw', email: 'yaw@demo.gh', name: 'Yaw Kyei', phone: '+233244777888', employeeNumber: 'DRV-004', area: 'kumasi' },
+  { uid: 'd_kwame', email: 'kwame@demo.gh', name: 'Kwame Mensah', phone: '+233244111222', employeeNumber: 'RDR-001', area: 'accra', riderType: 'pickup' as const },
+  { uid: 'd_kojo', email: 'kojo@demo.gh', name: 'Kojo Asante', phone: '+233244555666', employeeNumber: 'RDR-002', area: 'accra', riderType: 'pickup' as const },
+  { uid: 'd_esi', email: 'esi@demo.gh', name: 'Esi Owusu', phone: '+233244333444', employeeNumber: 'RDR-003', area: 'accra', riderType: 'delivery' as const },
+  { uid: 'd_abena', email: 'abena@demo.gh', name: 'Abena Ofori', phone: '+233244999000', employeeNumber: 'RDR-004', area: 'accra', riderType: 'delivery' as const },
+  { uid: 'd_yaw', email: 'yaw@demo.gh', name: 'Yaw Kyei', phone: '+233244777888', employeeNumber: 'RDR-005', area: 'kumasi', riderType: 'pickup' as const },
 ];
 const SENDERS = [
   ['Kofi Boateng', '0501234567'],
@@ -93,11 +94,19 @@ async function book(at: Date, caller: string | null, from: Address, to: Address,
   });
 }
 
-async function deliver(driver: string, tn: string, start: Date) {
+const assign = (at: Date, tn: string, rider: string) => withClock(at, () => callAs('d_dispatch', 'dispatchAction', { type: 'assign', deliveryId: tn, driverUid: rider }));
+const scan = (at: Date, tn: string, type: 'receive' | 'handover') => withClock(at, () => callAs('d_hub_acc', 'hubScan', { hubId: 'acc-01', type, trackingNumber: tn }));
+
+/** Pickup rider brings it to the warehouse; delivery rider takes it to the recipient. */
+async function deliver(pickupRider: string, deliveryRider: string, tn: string, start: Date) {
   const t = (min: number) => new Date(start.getTime() + min * 60_000);
-  await act(driver, t(0), tn, 'start_assignment');
-  await act(driver, t(20), tn, 'confirm_pickup', { scannedCode: tn, cashCollected: true });
-  await act(driver, t(55), tn, 'complete_delivery', { receivedByName: 'Recipient', otp: OTP });
+  await assign(t(0), tn, pickupRider);
+  await act(pickupRider, t(1), tn, 'start_assignment');
+  await act(pickupRider, t(20), tn, 'confirm_pickup', { scannedCode: tn, cashCollected: true });
+  await scan(t(45), tn, 'receive');
+  await assign(t(50), tn, deliveryRider);
+  await scan(t(60), tn, 'handover');
+  await act(deliveryRider, t(95), tn, 'complete_delivery', { receivedByName: 'Recipient', otp: OTP });
 }
 
 function account(p: { uid: string; email: string; name: string; phone?: string }, claims: Record<string, unknown>): DemoAccount {
@@ -132,11 +141,12 @@ export async function seed(now = new Date()) {
     for (const p of PEOPLE) account(p, { role: p.role, ...(p.extra ?? {}) });
     for (const d of DRIVERS) {
       account(d, { role: 'driver' });
-      await s.opsStore.createDriver({ uid: d.uid, name: d.name, phone: d.phone, email: d.email, employeeNumber: d.employeeNumber, homeServiceAreaId: d.area, status: 'active', currentShift: null });
+      await s.opsStore.createDriver({ uid: d.uid, name: d.name, phone: d.phone, email: d.email, employeeNumber: d.employeeNumber, homeServiceAreaId: d.area, riderType: d.riderType, status: 'active', currentShift: null });
     }
     const vehicles = [
       { id: 'bike-01', registrationNumber: 'M-24-GR 1101', vehicleClass: 'motorbike', capacityKg: 25, homeServiceAreaId: 'accra' },
       { id: 'bike-02', registrationNumber: 'M-24-GR 1102', vehicleClass: 'motorbike', capacityKg: 25, homeServiceAreaId: 'accra' },
+      { id: 'bike-03', registrationNumber: 'M-24-GR 1103', vehicleClass: 'motorbike', capacityKg: 25, homeServiceAreaId: 'accra' },
       { id: 'van-01', registrationNumber: 'GR 4521-24', vehicleClass: 'van', capacityKg: 900, homeServiceAreaId: 'accra' },
       { id: 'bike-ks1', registrationNumber: 'M-24-AS 2201', vehicleClass: 'motorbike', capacityKg: 25, homeServiceAreaId: 'kumasi' },
     ];
@@ -172,32 +182,32 @@ export async function seed(now = new Date()) {
       await callAs('d_finance', 'setCreditTerms', { businessId: bizId, limitPesewas: 500_000, termDays: 30 });
     });
 
-    // ---- Six weeks of deliveries (two drivers), fuel, expenses -----------------------------------
+    // ---- Six weeks of deliveries (a pickup rider and a delivery rider), fuel, expenses -------------
     const days: Date[] = [];
     for (let k = 40; k >= 2; k -= 3) days.push(new Date(now.getTime() - k * 86_400_000));
     let odo: Record<string, number> = { d_kwame: 12_400, d_esi: 9_100 };
     const bikeOf: Record<string, string> = { d_kwame: 'bike-01', d_esi: 'bike-02' };
+    const RIDERS = ['d_kwame', 'd_esi'];
     let n = 0;
     for (const d of days) {
-      for (const driver of ['d_kwame', 'd_esi']) {
-        await withClock(day(d, 7, 30), () => callAs(driver, 'startShift', { vehicleId: bikeOf[driver], odometerKm: odo[driver] }));
-        const jobs = 2 + (n % 2);
-        for (let j = 0; j < jobs; j++) {
-          n++;
-          const business = n % 4 === 0;
-          const from = business ? addr('Accra Mall, Spintex Road, Accra', 'Adwoa Styles, Accra Mall shop 14') : addr(ACCRA[n % ACCRA.length]!);
-          let toLabel = ACCRA[(n + 3) % ACCRA.length]!;
-          if (business && toLabel.startsWith('Accra Mall')) toLabel = ACCRA[(n + 4) % ACCRA.length]!;
-          const to = addr(toLabel);
-          const caller = business ? 'd_adwoa' : n % 3 === 0 ? 'd_ama' : null;
-          const b = await book(day(d, 8, j * 10), caller, from, to, { pref: business ? 'business_invoice' : 'cash_on_pickup', i: n, ...(caller === 'd_ama' ? { sender: ['Ama Mensah', '0241234567'] as const } : {}) });
-          await withClock(day(d, 8, 30 + j), () => callAs('d_dispatch', 'dispatchAction', { type: 'assign', deliveryId: b.trackingNumber, driverUid: driver }));
-          await deliver(driver, b.trackingNumber, day(d, 9 + j * 2));
-        }
+      for (const r of RIDERS) await withClock(day(d, 7, 30), () => callAs(r, 'startShift', { vehicleId: bikeOf[r], odometerKm: odo[r] }));
+      const jobs = 4 + (n % 3);
+      for (let j = 0; j < jobs; j++) {
+        n++;
+        const business = n % 4 === 0;
+        const from = business ? addr('Accra Mall, Spintex Road, Accra', 'Adwoa Styles, Accra Mall shop 14') : addr(ACCRA[n % ACCRA.length]!);
+        let toLabel = ACCRA[(n + 3) % ACCRA.length]!;
+        if (business && toLabel.startsWith('Accra Mall')) toLabel = ACCRA[(n + 4) % ACCRA.length]!;
+        const to = addr(toLabel);
+        const caller = business ? 'd_adwoa' : n % 3 === 0 ? 'd_ama' : null;
+        const b = await book(day(d, 8, j * 10), caller, from, to, { pref: business ? 'business_invoice' : 'cash_on_pickup', i: n, ...(caller === 'd_ama' ? { sender: ['Ama Mensah', '0241234567'] as const } : {}) });
+        await deliver('d_kwame', 'd_esi', b.trackingNumber, day(d, 8, 40 + j * 75));
+      }
+      for (const r of RIDERS) {
         const km = 35 + ((n * 7) % 30);
-        if (n % 3 === 0) await withClock(day(d, 13), () => callAs(driver, 'logFuel', { litres: 6, amountPesewas: 9_000, odometerKm: odo[driver]! + Math.round(km / 2), fullTank: true, station: 'GOIL Osu' }));
-        odo = { ...odo, [driver]: odo[driver]! + km };
-        await withClock(day(d, 17, 30), () => callAs(driver, 'endShift', { odometerKm: odo[driver] }));
+        if (n % 3 === 0) await withClock(day(d, 16), () => callAs(r, 'logFuel', { litres: 6, amountPesewas: 9_000, odometerKm: odo[r]! + Math.round(km / 2), fullTank: true, station: 'GOIL Osu' }));
+        odo = { ...odo, [r]: odo[r]! + km };
+        await withClock(day(d, 18, 30), () => callAs(r, 'endShift', { odometerKm: odo[r] }));
       }
     }
     // Approve the fuel expenses; a service and a hub cost.
@@ -219,41 +229,59 @@ export async function seed(now = new Date()) {
       await callAs('d_finance', 'generateDriverPay', { period: prev });
     });
     await withClock(new Date(monthStart.getTime() + 2 * 86_400_000), async () => {
-      for (const d of ['d_kwame', 'd_esi']) {
+      for (const d of RIDERS) {
         const id = `${prev}_${d}`;
         if (!db.get(`driverPayments/${id}`)) continue;
         await callAs('d_finance', 'approveDriverPay', { statementId: id });
         await callAs('d_finance', 'markDriverPaid', { statementId: id, method: 'mobile_money', reference: `MOMO-PAY-${d.slice(2).toUpperCase()}` });
       }
-      for (const d of ['d_kwame', 'd_esi']) {
+      for (const d of RIDERS) {
         const cash = db.get(`driverCash/${d}`) as { collectedPesewas?: number; remittedPesewas?: number } | undefined;
         const held = (cash?.collectedPesewas ?? 0) - (cash?.remittedPesewas ?? 0);
-        if (held > 2000) await callAs('d_finance', 'recordCashRemittance', { driverUid: d, amountPesewas: held - 2000, method: 'cash', reference: 'Accra hub safe' });
+        if (held > 2000) await callAs('d_finance', 'recordCashRemittance', { driverUid: d, amountPesewas: held - 2000, method: 'cash', reference: 'Accra warehouse safe' });
       }
     });
 
-    // ---- Today: drivers on the road, jobs waiting --------------------------------------------------
+    // ---- Today: riders on the road, an order at every stage ------------------------------------------
     const t = (min: number) => new Date(now.getTime() - min * 60_000);
     await withClock(t(150), () => callAs('d_kwame', 'startShift', { vehicleId: 'bike-01', odometerKm: odo.d_kwame }));
+    await withClock(t(145), () => callAs('d_kojo', 'startShift', { vehicleId: 'van-01', odometerKm: 31_020 }));
     await withClock(t(140), () => callAs('d_esi', 'startShift', { vehicleId: 'bike-02', odometerKm: odo.d_esi }));
-    await withClock(t(140), () => callAs('d_kojo', 'startShift', { vehicleId: 'van-01', odometerKm: 31_020 }));
-    const out = await book(t(120), 'd_ama', addr('Oxford Street, Osu, Accra'), addr('East Legon, Lagos Avenue, Accra'), { i: 1, sender: ['Ama Mensah', '0241234567'] });
-    await withClock(t(110), () => callAs('d_dispatch', 'dispatchAction', { type: 'assign', deliveryId: out.trackingNumber, driverUid: 'd_kwame' }));
-    await act('d_kwame', t(100), out.trackingNumber, 'start_assignment');
-    await act('d_kwame', t(25), out.trackingNumber, 'confirm_pickup', { scannedCode: out.trackingNumber, cashCollected: true });
-    const second = await book(t(90), null, addr('Makola Market, Accra Central'), addr('Dansoman Roundabout, Dansoman, Accra'), { i: 2 });
-    await withClock(t(60), () => callAs('d_dispatch', 'dispatchAction', { type: 'assign', deliveryId: second.trackingNumber, driverUid: 'd_kwame' }));
-    const third = await book(t(70), 'd_adwoa', addr('Accra Mall, Spintex Road, Accra', 'Adwoa Styles, Accra Mall shop 14'), addr('University of Ghana, Legon'), { pref: 'business_invoice', i: 3 });
-    await withClock(t(50), () => callAs('d_dispatch', 'dispatchAction', { type: 'assign', deliveryId: third.trackingNumber, driverUid: 'd_esi' }));
-    await act('d_esi', t(40), third.trackingNumber, 'start_assignment');
-    await book(t(30), null, addr('Achimota Mall, Achimota, Accra'), addr('Kotoka International Airport, Accra'), { urgency: 'express', i: 4 });
-    await book(t(15), 'd_ama', addr('Labadi Beach Road, La, Accra'), addr('Madina Market, Madina, Accra'), { i: 5, sender: ['Ama Mensah', '0241234567'] });
-    // An intercity parcel collected and scanned in at the Accra hub, waiting for the Kumasi truck.
-    const inter = await book(t(200), null, addr('Kaneshie Market, Kaneshie, Accra'), addr('Adum, Kumasi'), { i: 6 });
-    await withClock(t(190), () => callAs('d_dispatch', 'dispatchAction', { type: 'assign', deliveryId: inter.trackingNumber, driverUid: 'd_esi' }));
-    await act('d_esi', t(185), inter.trackingNumber, 'start_assignment');
-    await act('d_esi', t(170), inter.trackingNumber, 'confirm_pickup', { scannedCode: inter.trackingNumber, cashCollected: true });
-    await withClock(t(155), () => callAs('d_hub_acc', 'hubScan', { hubId: 'acc-01', type: 'receive', trackingNumber: inter.trackingNumber }));
+    await withClock(t(135), () => callAs('d_abena', 'startShift', { vehicleId: 'bike-03', odometerKm: 4_250 }));
+    // Delivered this morning.
+    const early = await book(t(135), null, addr('Kaneshie Market, Kaneshie, Accra'), addr('Labadi Beach Road, La, Accra'), { i: 7 });
+    await deliver('d_kwame', 'd_abena', early.trackingNumber, t(130));
+    // Out for delivery with Abena.
+    const outNow = await book(t(125), 'd_ama', addr('Oxford Street, Osu, Accra'), addr('East Legon, Lagos Avenue, Accra'), { i: 1, sender: ['Ama Mensah', '0241234567'] });
+    await assign(t(120), outNow.trackingNumber, 'd_kwame');
+    await act('d_kwame', t(118), outNow.trackingNumber, 'start_assignment');
+    await act('d_kwame', t(95), outNow.trackingNumber, 'confirm_pickup', { scannedCode: outNow.trackingNumber, cashCollected: true });
+    await scan(t(70), outNow.trackingNumber, 'receive');
+    await assign(t(40), outNow.trackingNumber, 'd_abena');
+    await scan(t(30), outNow.trackingNumber, 'handover');
+    // At the warehouse: one waiting for a delivery rider, one with Esi assigned (ready to hand over).
+    const waiting = await book(t(110), null, addr('Dansoman Roundabout, Dansoman, Accra'), addr('Madina Market, Madina, Accra'), { i: 8 });
+    await assign(t(105), waiting.trackingNumber, 'd_kojo');
+    await act('d_kojo', t(100), waiting.trackingNumber, 'start_assignment');
+    await act('d_kojo', t(75), waiting.trackingNumber, 'confirm_pickup', { scannedCode: waiting.trackingNumber, cashCollected: true });
+    await scan(t(45), waiting.trackingNumber, 'receive');
+    const ready = await book(t(100), 'd_adwoa', addr('Accra Mall, Spintex Road, Accra', 'Adwoa Styles, Accra Mall shop 14'), addr('University of Ghana, Legon'), { pref: 'business_invoice', i: 3 });
+    await assign(t(95), ready.trackingNumber, 'd_kojo');
+    await act('d_kojo', t(93), ready.trackingNumber, 'start_assignment');
+    await act('d_kojo', t(70), ready.trackingNumber, 'confirm_pickup', { scannedCode: ready.trackingNumber });
+    await scan(t(40), ready.trackingNumber, 'receive');
+    await assign(t(10), ready.trackingNumber, 'd_esi');
+    // Picked up, on the way to the warehouse with Kwame.
+    const coming = await book(t(60), null, addr('Makola Market, Accra Central'), addr('Dansoman Roundabout, Dansoman, Accra'), { i: 2 });
+    await assign(t(50), coming.trackingNumber, 'd_kwame');
+    await act('d_kwame', t(48), coming.trackingNumber, 'start_assignment');
+    await act('d_kwame', t(20), coming.trackingNumber, 'confirm_pickup', { scannedCode: coming.trackingNumber, cashCollected: true });
+    // Kwame's next pickup (assigned, not started).
+    const next = await book(t(35), 'd_ama', addr('Labadi Beach Road, La, Accra'), addr('Achimota Mall, Achimota, Accra'), { i: 5, sender: ['Ama Mensah', '0241234567'] });
+    await assign(t(25), next.trackingNumber, 'd_kwame');
+    // New orders waiting for a pickup rider.
+    await book(t(15), null, addr('Achimota Mall, Achimota, Accra'), addr('Kotoka International Airport, Accra'), { urgency: 'express', i: 4 });
+    await book(t(8), null, addr('University of Ghana, Legon'), addr('Makola Market, Accra Central'), { i: 9 });
     await withClock(t(5), () => callAs('d_dispatch', 'planDriverRoute', { driverUid: 'd_kwame' }));
   } finally {
     s.opsDeps.newOtp = realOtp;

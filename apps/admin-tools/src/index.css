@@ -1,27 +1,48 @@
 @import "tailwindcss";
 
+/*
+ * Look: light grey page, white rounded cards, black primary buttons and a bright yellow accent
+ * (selected items, highlights, focus). "brand" is the ink scale used for buttons and links;
+ * "brand-50/100/500" are the yellow tints, so existing `bg-brand-50 text-brand-700` badges read
+ * as black on light yellow.
+ */
 @theme {
-  --color-brand-50: #eefbf3;
-  --color-brand-100: #d6f5e1;
-  --color-brand-500: #16a34a;
-  --color-brand-600: #15803d;
-  --color-brand-700: #166534;
-  --color-accent-400: #facc15;
-  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --color-brand-50: #fff8d1;
+  --color-brand-100: #ffef99;
+  --color-brand-500: #ffcc00;
+  --color-brand-600: #1a1a1a;
+  --color-brand-700: #000000;
+  --color-accent-400: #ffd919;
+  --color-page: #f3f3f1;
+  --color-field: #f1f1ef;
+  --font-sans: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+body {
+  background: var(--color-page);
+  color: #141414;
+  -webkit-font-smoothing: antialiased;
 }
 
 @utility btn {
-  @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50;
+  @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold transition active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100;
 }
 @utility btn-primary {
-  @apply btn bg-brand-600 text-white hover:bg-brand-700;
+  @apply btn bg-brand-600 text-white hover:bg-black;
+}
+/* The big yellow call to action (Book, Assign). */
+@utility btn-accent {
+  @apply btn bg-accent-400 text-black hover:bg-brand-500;
 }
 @utility btn-secondary {
-  @apply btn border border-slate-300 bg-white text-slate-800 hover:bg-slate-50;
+  @apply btn bg-field text-slate-900 hover:bg-slate-200;
 }
 @utility input {
-  @apply block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-slate-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30 focus:outline-none;
+  @apply block min-h-11 w-full rounded-xl border border-transparent bg-field px-3.5 py-2.5 text-sm placeholder:text-slate-400 focus:border-brand-500 focus:bg-white focus:ring-2 focus:ring-brand-500/40 focus:outline-none;
 }
 @utility card {
-  @apply rounded-xl border border-slate-200 bg-white p-5 shadow-sm;
+  @apply rounded-2xl bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)];
+}
+@utility chip {
+  @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold;
 }

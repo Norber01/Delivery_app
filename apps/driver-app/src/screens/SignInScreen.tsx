@@ -13,7 +13,7 @@ export function SignInScreen() {
   return (
     <KeyboardAvoidingView behavior="padding" style={s.screen}>
       <ScrollView contentContainerStyle={[s.content, { paddingTop: 64 }]}>
-        <Text style={s.h1}>{config.companyName} Driver</Text>
+        <Text style={s.h1}>{config.companyName} Rider</Text>
         <Text style={s.muted}>Sign in with the work email your supervisor set up for you.</Text>
         {msg && <Notice tone={msg.tone === 'error' ? 'error' : 'ok'}>{msg.text}</Notice>}
         <Field label="Work email" autoCapitalize="none" keyboardType="email-address" autoComplete="email" value={email} onChangeText={setEmail} />
@@ -29,7 +29,7 @@ export function SignInScreen() {
               const role = (await cred.user.getIdTokenResult()).claims.role;
               if (role !== 'driver') {
                 await auth.signOut();
-                setMsg({ tone: 'error', text: 'This account is not a driver account.' });
+                setMsg({ tone: 'error', text: 'This account is not a rider account.' });
               }
             } catch {
               setMsg({ tone: 'error', text: 'Email or password is incorrect, or you are offline.' });

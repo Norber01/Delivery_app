@@ -45,11 +45,17 @@ export function useStaffAuth() {
   return v;
 }
 
-export const canDispatch = (r: Role | null) => r === 'dispatcher' || r === 'admin' || r === 'super_admin';
-export const canManageFleet = (r: Role | null) => r === 'fleet_manager' || r === 'admin' || r === 'super_admin';
-export const canOperateHubs = (r: Role | null) => r === 'hub_operator' || r === 'dispatcher' || r === 'admin' || r === 'super_admin';
+export const canDispatch = (r: Role | null) => r === 'dispatcher' || r === 'manager' || r === 'admin' || r === 'super_admin';
+export const canManageFleet = (r: Role | null) => r === 'fleet_manager' || r === 'manager' || r === 'admin' || r === 'super_admin';
+export const canOperateHubs = (r: Role | null) => r === 'hub_operator' || r === 'dispatcher' || r === 'manager' || r === 'admin' || r === 'super_admin';
 export const canManageNetwork = (r: Role | null) => r === 'admin' || r === 'super_admin';
-export const canManageBusinesses = (r: Role | null) => r === 'finance' || r === 'admin' || r === 'super_admin';
-export const canReviewBusinesses = (r: Role | null) => r === 'admin' || r === 'super_admin';
+export const canManageBusinesses = (r: Role | null) => r === 'finance' || r === 'manager' || r === 'admin' || r === 'super_admin';
+export const canReviewBusinesses = (r: Role | null) => r === 'manager' || r === 'admin' || r === 'super_admin';
 export const canManageInvoices = canManageBusinesses;
-export const canManageExpenses = (r: Role | null) => r === 'finance' || r === 'fleet_manager' || r === 'admin' || r === 'super_admin';
+/** Manager and admins: the overview of everything. */
+export const canOversee = (r: Role | null) => r === 'manager' || r === 'admin' || r === 'super_admin';
+/** Excel backup of the business data. */
+export const canBackup = (r: Role | null) => r === 'manager' || r === 'finance' || r === 'admin' || r === 'super_admin';
+/** Riders list: fleet staff manage it; dispatch and the manager can see it and switch rider types. */
+export const canSeeRiders = (r: Role | null) => canManageFleet(r) || canDispatch(r);
+export const canManageExpenses = (r: Role | null) => r === 'finance' || r === 'fleet_manager' || r === 'manager' || r === 'admin' || r === 'super_admin';

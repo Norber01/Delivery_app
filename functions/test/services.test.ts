@@ -2,7 +2,9 @@ import { describe, expect, it, beforeEach } from 'vitest';
 import type { MapProvider } from '@courier/shared-utils';
 import { MapProviderError } from '@courier/shared-utils';
 import type { PricingRuleSet, ServiceArea } from '@courier/shared-types';
-import rulesJson from '../../firebase/seed/pricing-rules.sample.json' with { type: 'json' };
+import sampleRules from '../../firebase/seed/pricing-rules.sample.json' with { type: 'json' };
+// The sample ships with same-city only; the tests also cover intercity and long distance.
+const rulesJson = { ...sampleRules, intercity: { ...sampleRules.intercity, enabled: true }, longDistance: { ...sampleRules.longDistance, enabled: true } };
 import areasJson from '../../firebase/seed/service-areas.sample.json' with { type: 'json' };
 import { GUEST, type Caller } from '../src/lib/auth.js';
 import { AppError } from '../src/lib/errors.js';

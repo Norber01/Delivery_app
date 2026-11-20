@@ -144,6 +144,15 @@ export class FirestoreOpsStore implements OpsStore {
     await this.col('drivers').doc(d.uid).create({ ...d, createdAt: FieldValue.serverTimestamp() });
   }
 
+  async updateDriver(uid: string, patch: Partial<Pick<DriverDoc, 'riderType' | 'status'>>) {
+    const ref = this.col('drivers').doc(uid);
+    return this.db.runTransaction(async (tx) => {
+      if (!(await tx.get(ref)).exists) return false;
+      tx.update(ref, { ...patch, updatedAt: FieldValue.serverTimestamp() });
+      return true;
+    });
+  }
+
   async getVehicle(id: string) {
     const s = await this.col('vehicles').doc(id).get();
     return s.exists ? (s.data() as VehicleDoc) : null;
@@ -214,6 +223,12 @@ export class FirestoreOpsStore implements OpsStore {
   }
   async upsertRoute(r: RouteDoc) {
     await this.col('routes').doc(r.id).set({ ...r, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+  }
+  async findWarehouse(areaId: string) {
+    const s = await this.col('hubs').where('serviceAreaId', '==', areaId).where('primaryForArea', '==', true).where('active', '==', true).limit(1).get();
+    if (s.empty) return null;
+    const h = s.docs[0]!.data() as HubDoc;
+    return { id: h.id, code: h.code, name: h.name, city: h.city, location: h.location };
   }
   async findNetworkRoute(originAreaId: string, destinationAreaId: string): Promise<NetworkRoute | null> {
     const primary = async (areaId: string) => {

@@ -87,10 +87,10 @@ export function JobScreen({ job, onBack }: { job: DeliveryDoc; onBack: () => voi
 
   const call = (phone: string) => void Linking.openURL(`tel:${phone}`);
   const navigate = (p: { lat: number; lng: number }) => void Linking.openURL(navigationUrl(p, Platform.OS === 'android' ? 'android' : 'other'));
-  // Hub legs: first mile ends at the origin hub; last mile starts by collecting at the destination hub.
+  // Warehouse legs: a pickup rider's job ends at the warehouse; a delivery rider's starts there.
   const hub = job.status === 'picked_up' ? job.originHub : job.status === 'at_destination_hub' ? job.destinationHub : null;
   const stop = hub
-    ? { title: job.status === 'picked_up' ? 'Drop at hub' : 'Collect at hub', contact: { name: hub.name, phone: config.dispatchPhone }, address: { line1: `${hub.name} (${hub.code})`, location: hub.location } as DeliveryDoc['pickup'] }
+    ? { title: job.status === 'picked_up' ? 'Drop at warehouse' : 'Collect at warehouse', contact: { name: hub.name, phone: config.dispatchPhone }, address: { line1: `${hub.name} (${hub.code})`, location: hub.location } as DeliveryDoc['pickup'] }
     : pickupStage || job.status === 'returning_to_sender'
       ? { title: 'Pickup', contact: job.sender, address: job.pickup }
       : { title: 'Delivery', contact: job.recipient, address: job.destination };
@@ -158,8 +158,8 @@ export function JobScreen({ job, onBack }: { job: DeliveryDoc; onBack: () => voi
           {hub && (
             <Notice tone="warn">
               {job.status === 'picked_up'
-                ? `Hand the package to the ${hub.name} team. They scan it in; the job then leaves your list.`
-                : `Collect the package from the ${hub.name} team. They scan it out to you, then deliver as usual.`}
+                ? `Hand the parcel to the ${hub.name} team. They scan it in and the job leaves your list.`
+                : `Collect the parcel from the ${hub.name} team. They scan it out to you, then deliver it.`}
             </Notice>
           )}
           {(pickupStage || job.status === 'out_for_delivery') && job.status !== 'assigned' && <Button title="Report a problem" tone="secondary" onPress={() => setMode('problem')} />}

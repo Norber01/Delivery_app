@@ -17,7 +17,7 @@
     }
   },
   "longDistance": {
-    "enabled": true,
+    "enabled": false,
     "maxDistanceKm": 800,
     "minimumPesewas": 15000,
     "rates": {
@@ -27,6 +27,7 @@
     }
   },
   "intercity": {
+    "enabled": false,
     "routes": [
       {
         "originAreaId": "accra",

@@ -42,7 +42,7 @@ const HANDLING_LABEL: Record<SpecialHandling, string> = {
 };
 
 const PAYMENT_OPTIONS: { value: PaymentPreference; label: string; hint: string }[] = [
-  { value: 'cash_on_pickup', label: 'Pay the driver at pickup', hint: 'Cash or Mobile Money to the driver when your package is collected.' },
+  { value: 'cash_on_pickup', label: 'Pay the rider at pickup', hint: 'Cash or Mobile Money to the rider when your parcel is collected.' },
   {
     value: 'mobile_money',
     label: 'Mobile Money — pay online now',
@@ -182,13 +182,14 @@ export function BookPage() {
     : undefined;
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-10">
-      <h1 className="mb-6 text-3xl font-bold">Book a delivery</h1>
+    <div className="mx-auto max-w-3xl px-4 py-8">
+      <h1 className="mb-5 text-3xl font-extrabold tracking-tight">Send a parcel</h1>
 
-      <ol className="mb-8 grid grid-cols-5 gap-2 text-xs font-medium">
+      <ol className="mb-6 grid grid-cols-5 gap-1.5 text-xs">
         {STEPS.map((s, i) => (
-          <li key={s.id} className={`border-t-4 pt-2 ${i <= stepIndex ? 'border-brand-600 text-brand-700' : 'border-slate-200 text-slate-400'}`}>
-            {s.label}
+          <li key={s.id} className="space-y-1.5">
+            <span className={`block h-1.5 rounded-full ${i <= stepIndex ? 'bg-accent-400' : 'bg-slate-200'}`} />
+            <span className={i === stepIndex ? 'font-bold text-black' : i < stepIndex ? 'text-slate-700' : 'text-slate-400'}>{s.label}</span>
           </li>
         ))}
       </ol>
@@ -307,7 +308,7 @@ export function BookPage() {
           />
 
           <div className="card space-y-4">
-            <Field label="Instructions for our driver" optional error={errors.instructions}>
+            <Field label="Instructions for our rider" optional error={errors.instructions}>
               {(p) => (
                 <textarea
                   {...p}
@@ -435,8 +436,8 @@ function BookingConfirmation({ booking }: { booking: CreateBookingResponse }) {
         <h2 className="text-2xl font-bold">{confirmed ? 'Booking confirmed' : 'Booking received — payment needed'}</h2>
         <p className="text-slate-600">
           {confirmed
-            ? 'Our dispatch team will assign a driver for pickup.'
-            : 'Pay now to confirm your booking. We dispatch a driver as soon as payment is verified.'}
+            ? 'A pickup rider will be assigned shortly.'
+            : 'Pay now to confirm your booking. We send a pickup rider as soon as payment is verified.'}
         </p>
       </div>
       <div className="rounded-lg bg-slate-50 p-4">

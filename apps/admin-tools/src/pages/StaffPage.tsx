@@ -8,10 +8,11 @@ import { getFirebase } from '../lib/firebase';
 import { useQuery } from '../lib/useLive';
 
 const ROLE_LABEL: Record<StaffRole, string> = {
-  hub_operator: 'Hub operator',
+  hub_operator: 'Warehouse staff',
   dispatcher: 'Dispatcher',
   fleet_manager: 'Fleet manager',
   finance: 'Finance',
+  manager: 'Manager (sees everything)',
   admin: 'Administrator',
   super_admin: 'Super administrator',
 };

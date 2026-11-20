@@ -39,7 +39,7 @@ export function stopsFor(d: DeliveryRecord, uid: string): (RouteStop & { label: 
 
 /** Plan (or re-plan) a driver's current run. Dispatch for any driver in scope; drivers for themselves. */
 export async function planDriverRoute(deps: RouteDeps, caller: Caller, raw: unknown): Promise<RoutePlanDoc> {
-  requireRole(caller, ['driver', 'dispatcher', 'admin', 'super_admin']);
+  requireRole(caller, ['driver', 'dispatcher', 'manager', 'admin', 'super_admin']);
   const input = parse(planRouteSchema, raw);
   const uid = caller.role === 'driver' ? caller.uid : input.driverUid;
   if (!uid) throw new AppError('VALIDATION_FAILED', 'Choose a driver.', 'invalid-argument');

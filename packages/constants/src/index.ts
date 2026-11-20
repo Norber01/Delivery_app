@@ -11,6 +11,7 @@ export const ROLES = [
   'dispatcher',
   'fleet_manager',
   'finance',
+  'manager',
   'admin',
   'super_admin',
 ] as const;
@@ -22,6 +23,7 @@ export const STAFF_ROLES = [
   'dispatcher',
   'fleet_manager',
   'finance',
+  'manager',
   'admin',
   'super_admin',
 ] as const satisfies readonly Role[];
@@ -37,6 +39,7 @@ export const ADMIN_GRANTABLE_ROLES = [
   'dispatcher',
   'fleet_manager',
   'finance',
+  'manager',
 ] as const satisfies readonly Role[];
 
 export const DELIVERY_TYPES = ['intra_city', 'intercity', 'long_distance'] as const;
@@ -100,6 +103,15 @@ export type LegStatus = (typeof LEG_STATUSES)[number];
 
 export const VEHICLE_STATUSES = ['available', 'in_use', 'maintenance', 'retired'] as const;
 export type VehicleStatus = (typeof VEHICLE_STATUSES)[number];
+
+/**
+ * What a rider does: a pickup rider collects from senders and brings parcels to the warehouse;
+ * a delivery rider takes parcels from the warehouse to recipients. Each rider has one account
+ * of one type. (Older accounts without a type may do both.)
+ */
+export const RIDER_TYPES = ['pickup', 'delivery'] as const;
+export type RiderType = (typeof RIDER_TYPES)[number];
+export const RIDER_TYPE_LABELS: Record<RiderType, string> = { pickup: 'Pickup rider', delivery: 'Delivery rider' };
 
 export const DRIVER_STATUSES = ['active', 'suspended'] as const;
 export type DriverStatus = (typeof DRIVER_STATUSES)[number];
@@ -362,5 +374,7 @@ export const ERROR_CODES = [
   'ODOMETER_INVALID',
   'VEHICLE_DOCUMENTS_EXPIRED',
   'ALREADY_FINAL',
+  'WRONG_RIDER_TYPE',
+  'SAME_CITY_ONLY',
 ] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number];

@@ -143,7 +143,7 @@ export function AddressField({ title, value, onChange, errors, saved = [] }: Pro
           </p>
         ) : (
           <p className={`text-xs ${locationError ? 'text-red-600' : 'text-slate-500'}`}>
-            {locationError ? 'Please set the location using search or your current location.' : 'A map location is required so our driver can find you.'}
+            {locationError ? 'Please set the location using search or your current location.' : 'A map location is required so our rider can find you.'}
           </p>
         )}
       </div>

@@ -3,7 +3,7 @@
     ".read": false,
     ".write": false,
     "driverLocations": {
-      ".read": "auth != null && auth.token.firebase.sign_in_second_factor != null && (auth.token.role === 'dispatcher' || auth.token.role === 'hub_operator' || auth.token.role === 'fleet_manager' || auth.token.role === 'admin' || auth.token.role === 'super_admin')",
+      ".read": "auth != null && auth.token.firebase.sign_in_second_factor != null && (auth.token.role === 'dispatcher' || auth.token.role === 'hub_operator' || auth.token.role === 'fleet_manager' || auth.token.role === 'manager' || auth.token.role === 'admin' || auth.token.role === 'super_admin')",
       "$uid": {
         ".write": "auth != null && auth.uid === $uid && auth.token.role === 'driver' && root.child('shifts').child($uid).child('activeUntil').val() > now",
         ".validate": "newData.hasChildren(['lat', 'lng', 'accuracyM', 'recordedAt', 'serverAt', 'shiftId'])",

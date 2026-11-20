@@ -14,8 +14,8 @@ service cloud.firestore {
     }
     // Staff access additionally requires an MFA session.
     function staffIn(roles) { return role() in roles && hasMfa(); }
-    function isOps() { return staffIn(['dispatcher', 'hub_operator', 'finance', 'admin', 'super_admin']); }
-    function isAdmin() { return staffIn(['admin', 'super_admin']); }
+    function isOps() { return staffIn(['dispatcher', 'hub_operator', 'finance', 'manager', 'admin', 'super_admin']); }
+    function isAdmin() { return staffIn(['manager', 'admin', 'super_admin']); }
     function isBusinessMember(businessId) {
       return role() in ['business_owner', 'business_staff']
         && businessId is string
@@ -85,7 +85,7 @@ service cloud.firestore {
     }
 
     match /proofOfDelivery/{id} {
-      allow read: if staffIn(['dispatcher', 'finance', 'admin', 'super_admin']);
+      allow read: if staffIn(['dispatcher', 'finance', 'manager', 'admin', 'super_admin']);
       allow write: if false;
     }
 
@@ -112,7 +112,7 @@ service cloud.firestore {
       allow write: if false;
     }
     match /contractPricing/{id} {
-      allow read: if isBusinessMember(resource.data.businessId) || staffIn(['finance', 'admin', 'super_admin']);
+      allow read: if isBusinessMember(resource.data.businessId) || staffIn(['finance', 'manager', 'admin', 'super_admin']);
       allow write: if false;
     }
 
@@ -128,28 +128,28 @@ service cloud.firestore {
     match /payments/{id} {
       allow read: if (signedIn() && resource.data.customerUid == request.auth.uid)
         || (role() == 'business_owner' && isBusinessMember(resource.data.businessId))
-        || staffIn(['finance', 'admin', 'super_admin']);
+        || staffIn(['finance', 'manager', 'admin', 'super_admin']);
       allow write: if false;
     }
 
     match /refunds/{id} {
-      allow read: if staffIn(['finance', 'admin', 'super_admin']);
+      allow read: if staffIn(['finance', 'manager', 'admin', 'super_admin']);
       allow write: if false;
     }
 
     match /invoices/{id} {
       allow read: if (role() == 'business_owner' && isBusinessMember(resource.data.businessId))
-        || staffIn(['finance', 'admin', 'super_admin']);
+        || staffIn(['finance', 'manager', 'admin', 'super_admin']);
       allow write: if false;
     }
 
     // ---- Phase 6: routes, fleet, expenses, driver pay, analytics (written by functions only) ----
     function isOwnDriver(uid) { return isDriver() && request.auth.uid == uid; }
-    function isFleet() { return staffIn(['fleet_manager', 'admin', 'super_admin']); }
-    function isFinance() { return staffIn(['finance', 'admin', 'super_admin']); }
+    function isFleet() { return staffIn(['fleet_manager', 'manager', 'admin', 'super_admin']); }
+    function isFinance() { return staffIn(['finance', 'manager', 'admin', 'super_admin']); }
 
     match /routePlans/{uid} {
-      allow read: if isOwnDriver(uid) || staffIn(['dispatcher', 'admin', 'super_admin']);
+      allow read: if isOwnDriver(uid) || staffIn(['dispatcher', 'manager', 'admin', 'super_admin']);
       allow write: if false;
     }
     match /shifts/{id} {

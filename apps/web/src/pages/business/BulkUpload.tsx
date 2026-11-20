@@ -134,7 +134,7 @@ export function BulkUpload({ business }: { business: BusinessDoc }) {
             <input type="radio" checked={payment === 'business_invoice'} disabled={!onAccount} onChange={() => setPayment('business_invoice')} /> Monthly invoice{!onAccount && ' (needs approved credit)'}
           </label>
           <label className="flex items-center gap-2">
-            <input type="radio" checked={payment === 'cash_on_pickup'} onChange={() => setPayment('cash_on_pickup')} /> Pay the driver at pickup
+            <input type="radio" checked={payment === 'cash_on_pickup'} onChange={() => setPayment('cash_on_pickup')} /> Pay the rider at pickup
           </label>
         </fieldset>
         <button className="btn-primary" disabled={busy || rows.length === 0 || missing.length > 0} onClick={check}>

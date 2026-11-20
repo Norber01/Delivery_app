@@ -1,6 +1,8 @@
 # Ghana Nationwide Courier & Logistics Platform
 
-Monorepo for a company-operated courier service in Ghana: own vehicles, own drivers, own hubs, one central dispatch team. Customers (individuals, online sellers, businesses) book directly.
+Monorepo for a company-operated courier service in Ghana: own vehicles, own riders, one central dispatch team. Customers (individuals, online sellers, businesses) book directly.
+
+**How an order flows (current setup):** the customer books → dispatch assigns a **pickup rider**, who collects the parcel (and any cash) and brings it to the **warehouse** → warehouse staff scan it in → dispatch assigns a **delivery rider** → the warehouse gives it to them → they deliver it with the recipient's one-time code. Pickup and delivery riders have separate accounts; the **manager** sees everything (the *Today* overview, orders, warehouse, riders, money) and can download an **Excel backup**. Deliveries between cities are switched off in the sample prices (`intercity.enabled: false`); the multi-hub/intercity code is still there for later. See [docs/15-order-flow.md](docs/15-order-flow.md).
 
 ## Try the demo (no accounts needed)
 
@@ -33,6 +35,8 @@ A card-free demo of the whole platform runs in the browser on GitHub Pages — s
 **What works in Phase 5:** companies register with their Registrar-General and TIN details and documents, are verified by an administrator, add staff, keep an address book, upload up to 200 deliveries at once from a CSV (checked and priced row by row before anything is booked, with printable labels), and — once finance approves credit — book on a monthly invoice. Finance generates invoices, records payments and sees overdue accounts; businesses see their invoices and monthly delivery reports.
 
 **What works in Phase 6:** dispatch (or the driver) plans each driver's stops in the best order; drivers record odometer readings and fuel with receipt photos; fleet managers keep service schedules, insurance and roadworthy dates (expired papers block the vehicle) and maintenance records; finance approves expenses, runs monthly driver pay statements, tracks cash drivers collect and hand in, and gets a monthly report of revenue, costs and contribution by area, route and vehicle with automatic reconciliation checks. Optional daily export to BigQuery.
+
+**Order flow update (after the client's review):** every same-city order goes pickup rider → warehouse → delivery rider; rider accounts are *pickup* or *delivery* (dispatch can only assign the right type to each step); new **manager** role with a *Today* overview; **Excel backup** (orders, customers, payments, riders, cash hand-ins, rider pay, expenses, fuel, shifts) for any date range; simpler look (white cards, black buttons, yellow highlights) on the website, staff app and rider app; same city only for now.
 
 **Not yet available:** invoice emails and online invoice payment, payroll deductions, hub drop-off/collection by customers, automated intercity returns.
 

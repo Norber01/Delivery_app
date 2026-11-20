@@ -13,12 +13,12 @@ export function PayScreen({ uid, onBack }: { uid: string; onBack: () => void }) 
     <ScrollView style={s.screen} contentContainerStyle={s.content}>
       <Button title="‹ Back to jobs" tone="secondary" onPress={onBack} />
       <Text style={s.h1}>My pay</Text>
-      {held > 0 && <Notice tone="warn">You are holding {formatGhs(held)} of customer cash. Hand it in at the hub or by Mobile Money as agreed.</Notice>}
+      {held > 0 && <Notice tone="warn">You are holding {formatGhs(held)} of customer cash. Hand it in at the warehouse or by Mobile Money as agreed.</Notice>}
       {rules && (
         <Card>
           <Text style={s.h2}>Rates</Text>
           <Text style={s.text}>Per day worked: {formatGhs(rules.dailyRatePesewas)}</Text>
-          <Text style={s.text}>Same-city delivery: {formatGhs(rules.perJobPesewas.direct)} · Collection to hub: {formatGhs(rules.perJobPesewas.first_mile)} · Delivery from hub: {formatGhs(rules.perJobPesewas.last_mile)}</Text>
+          <Text style={s.text}>Pickup to warehouse: {formatGhs(rules.perJobPesewas.first_mile)} · Delivery from warehouse: {formatGhs(rules.perJobPesewas.last_mile)} · Door to door: {formatGhs(rules.perJobPesewas.direct)}</Text>
           <Text style={s.text}>Intercity trip: {formatGhs(rules.perLinehaulTripPesewas)}</Text>
         </Card>
       )}

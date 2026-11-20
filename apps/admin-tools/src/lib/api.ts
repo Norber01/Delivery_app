@@ -1,4 +1,4 @@
-import type { DispatchActionRequest, FinanceReport, RoutePlanDoc, UploadTicket } from '@courier/shared-types';
+import type { BackupWorkbook, DispatchActionRequest, FinanceReport, RoutePlanDoc, UploadTicket } from '@courier/shared-types';
 import { httpsCallable } from 'firebase/functions';
 import { getFirebase } from './firebase';
 
@@ -29,6 +29,8 @@ export const api = {
   getEvidenceUrl: (key: string) => call<{ key: string }, { url: string }>('getEvidenceUrl', { key }),
   createDriverAccount: (req: Record<string, unknown>) => call<typeof req, { uid: string; setupLink: string }>('createDriverAccount', req),
   upsertVehicle: (req: Record<string, unknown>) => call<typeof req, { id: string }>('upsertVehicle', req),
+  updateDriver: (req: { uid: string; riderType?: 'pickup' | 'delivery'; status?: 'active' | 'suspended' }) => call<typeof req, { uid: string }>('updateDriver', req),
+  exportBackup: (req: { from: string; to: string }) => call<typeof req, BackupWorkbook>('exportBackup', req, 300_000),
   upsertHub: (req: Record<string, unknown>) => call<typeof req, { id: string }>('upsertHub', req),
   upsertRoute: (req: Record<string, unknown>) => call<typeof req, { id: string }>('upsertRoute', req),
   hubScan: (req: { hubId: string; type: 'receive' | 'handover'; trackingNumber: string }) =>

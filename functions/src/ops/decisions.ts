@@ -10,9 +10,10 @@ import {
   VEHICLE_RANK,
   type DeliveryStatus,
   type ExceptionReason,
+  type LegType,
   type Role,
 } from '@courier/constants';
-import type { DriverDoc, LatLng, ShipmentLeg } from '@courier/shared-types';
+import type { DriverDoc, HubRef, LatLng, ShipmentLeg } from '@courier/shared-types';
 import { canTransition, distanceMeters, formatGhs, normalizeTrackingNumber, PUBLIC_STATUS_LABELS } from '@courier/shared-utils';
 import type { ValidDispatchAction, ValidDriverAction } from '@courier/validation';
 import { AppError } from '../lib/errors.js';
@@ -70,11 +71,19 @@ const updateLeg = (legs: ShipmentLeg[], legId: string | null, patch: Partial<Shi
 
 // ---- Delivery creation -------------------------------------------------------------
 
-/** Build the operational delivery for a confirmed booking. */
-export function buildDelivery(b: BookingRecord, now: Date, network: NetworkRoute | null = null): DeliveryRecord {
+/**
+ * Build the operational delivery for a confirmed booking.
+ * - Same city with a warehouse: a pickup rider brings the parcel to the warehouse (first mile),
+ *   then a delivery rider takes it to the recipient (last mile).
+ * - Intercity: first mile → linehaul between hubs → last mile.
+ * - Otherwise (no warehouse set up, long distance): one rider door to door.
+ */
+export function buildDelivery(b: BookingRecord, now: Date, network: NetworkRoute | null = null, warehouse: HubRef | null = null): DeliveryRecord {
+  const viaWarehouse = b.deliveryType === 'intra_city' && warehouse !== null;
+  const plan: readonly LegType[] | null = b.deliveryType === 'intercity' ? ['first_mile', 'linehaul', 'last_mile'] : viaWarehouse ? ['first_mile', 'last_mile'] : null;
   const legs: ShipmentLeg[] =
-    b.deliveryType === 'intercity'
-      ? (['first_mile', 'linehaul', 'last_mile'] as const).map((type, i) => ({
+    plan
+      ? plan.map((type, i) => ({
           id: `leg${i + 1}`,
           sequence: i + 1,
           type,
@@ -97,8 +106,8 @@ export function buildDelivery(b: BookingRecord, now: Date, network: NetworkRoute
     requiredVehicleClass: b.price.vehicleClass ?? vehicleClassForWeight(b.price.chargeableWeightKg),
     destinationAreaId: b.destinationAreaId,
     chargeableWeightKg: b.price.chargeableWeightKg,
-    originHub: network?.originHub ?? null,
-    destinationHub: network?.destinationHub ?? null,
+    originHub: network?.originHub ?? (viaWarehouse ? warehouse : null),
+    destinationHub: network?.destinationHub ?? (viaWarehouse ? warehouse : null),
     routeId: network?.route.id ?? null,
     linehaul: null,
     sender: b.sender,
@@ -187,7 +196,12 @@ export function decideDispatch(ctx: OpsContext, a: ValidDispatchAction, deps: Di
       if (!driverIsAvailable(driver, ctx) || driver.uid !== a.driverUid) {
         throw new AppError('DRIVER_UNAVAILABLE', 'This driver is not on an active shift.');
       }
-      const area = lastMile ? d.destinationAreaId : d.serviceAreaId;
+      // Pickup riders bring parcels to the warehouse; delivery riders take them to recipients.
+      const needed = leg.type === 'first_mile' ? 'pickup' : leg.type === 'last_mile' ? 'delivery' : null;
+      if (needed && driver.riderType && driver.riderType !== needed) {
+        throw new AppError('WRONG_RIDER_TYPE', needed === 'pickup' ? 'This order needs a pickup rider.' : 'This order needs a delivery rider.');
+      }
+      const area = lastMile ? (d.destinationAreaId ?? d.serviceAreaId) : d.serviceAreaId;
       if (driver.currentShift.serviceAreaId !== area) {
         throw new AppError('DRIVER_UNAVAILABLE', 'This driver is working in a different service area.');
       }
@@ -218,7 +232,7 @@ export function decideDispatch(ctx: OpsContext, a: ValidDispatchAction, deps: Di
           openException: null,
         },
         events: [
-          event(ctx, 'assigned', lastMile ? 'Driver assigned for final delivery' : 'Driver assigned', actor, {
+          event(ctx, 'assigned', lastMile ? 'Delivery rider assigned' : leg.type === 'first_mile' ? 'Pickup rider assigned' : 'Rider assigned', actor, {
             internalNote: `${leg.type} assigned to ${driver.name} (${driver.currentShift.vehicleClass})`,
           }),
         ],
@@ -408,7 +422,7 @@ export function decideDriverAction(ctx: OpsContext, a: ValidDriverAction, deps: 
           ...(toHub ? {} : { attempts: d.attempts + 1 }),
         },
         events: toHub
-          ? [event(ctx, 'picked_up', `Package collected — on the way to our ${d.originHub?.city ?? ''} hub`.trim(), actor, at)]
+          ? [event(ctx, 'picked_up', `Picked up — on the way to our ${d.originHub?.city ?? ''} warehouse`.replace('  ', ' '), actor, at)]
           : [event(ctx, 'picked_up', PUBLIC_STATUS_LABELS.picked_up, actor, at), event(ctx, 'out_for_delivery', PUBLIC_STATUS_LABELS.out_for_delivery, actor, at, 2)],
         notifications: otp ? [otp.notification] : [],
         audit,

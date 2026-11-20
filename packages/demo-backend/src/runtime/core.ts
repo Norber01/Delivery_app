@@ -87,7 +87,7 @@ export function onSessionChange(fn: () => void) {
   return () => sessionListeners.delete(fn);
 }
 
-const STAFF = ['hub_operator', 'dispatcher', 'fleet_manager', 'finance', 'admin', 'super_admin'];
+const STAFF = ['hub_operator', 'dispatcher', 'fleet_manager', 'finance', 'manager', 'admin', 'super_admin'];
 /** The decoded-token shape the Cloud Functions code expects (`req.auth`). */
 export function authFor(uid: string | null) {
   const a = uid ? getAccount(uid) : null;

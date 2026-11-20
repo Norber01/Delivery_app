@@ -30,8 +30,8 @@ export interface FleetDeps {
   newId: () => string;
 }
 
-export const FLEET_ROLES: Role[] = ['fleet_manager', 'admin', 'super_admin'];
-export const FINANCE_ROLES: Role[] = ['finance', 'admin', 'super_admin'];
+export const FLEET_ROLES: Role[] = ['fleet_manager', 'manager', 'admin', 'super_admin'];
+export const FINANCE_ROLES: Role[] = ['finance', 'manager', 'admin', 'super_admin'];
 /** A reading this far above the last one is almost certainly a typing mistake. */
 export const MAX_ODOMETER_JUMP_KM = 3000;
 
@@ -156,7 +156,7 @@ export async function recordMaintenance(deps: FleetDeps, caller: Caller, raw: un
 
 /** Signed upload URL for a receipt photo (drivers: fuel; fleet/finance/hub staff: other expenses). */
 export async function requestReceiptUpload(deps: FleetDeps, caller: Caller, raw: unknown): Promise<UploadTicket> {
-  requireRole(caller, ['driver', 'fleet_manager', 'finance', 'hub_operator', 'admin', 'super_admin']);
+  requireRole(caller, ['driver', 'fleet_manager', 'finance', 'hub_operator', 'manager', 'admin', 'super_admin']);
   const input = parse(receiptUploadSchema, raw);
   const ext = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'application/pdf': 'pdf' }[input.contentType];
   const key = `receipt/${caller.uid}/${randomId(20)}.${ext}`;
@@ -220,7 +220,7 @@ export async function logFuel(deps: FleetDeps, caller: Caller, raw: unknown) {
 // ---- Expenses ------------------------------------------------------------------------------------
 
 export async function submitExpense(deps: FleetDeps, caller: Caller, raw: unknown) {
-  requireRole(caller, ['fleet_manager', 'finance', 'hub_operator', 'admin', 'super_admin']);
+  requireRole(caller, ['fleet_manager', 'finance', 'hub_operator', 'manager', 'admin', 'super_admin']);
   const input = parse(expenseSchema, raw);
   if (caller.role === 'hub_operator' && (input.category !== 'hub' || !caller.hubIds?.includes(input.hubId ?? ''))) {
     throw new AppError('PERMISSION_DENIED', 'Hub staff can only record expenses for their own hub.', 'permission-denied');

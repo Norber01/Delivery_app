@@ -1,11 +1,12 @@
 import type { ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View, type TextInputProps } from 'react-native';
 
-export const colors = { brand: '#15803d', brandDark: '#166534', bg: '#f8fafc', text: '#0f172a', muted: '#64748b', border: '#e2e8f0', danger: '#b91c1c', warn: '#92400e', warnBg: '#fef3c7' };
+/** Black text and links, a bright yellow for the main action on every screen (easy to find on a sunny road). */
+export const colors = { brand: '#1a1a1a', brandDark: '#000000', accent: '#ffd919', bg: '#f3f3f1', text: '#141414', muted: '#6b6b6b', border: '#e4e4e0', danger: '#b91c1c', warn: '#92400e', warnBg: '#fff3c4' };
 
 export function Button({ title, onPress, disabled, busy, tone = 'primary' }: { title: string; onPress: () => void; disabled?: boolean; busy?: boolean; tone?: 'primary' | 'secondary' | 'danger' }) {
-  const bg = tone === 'primary' ? colors.brand : '#fff';
-  const fg = tone === 'primary' ? '#fff' : tone === 'danger' ? colors.danger : colors.text;
+  const bg = tone === 'primary' ? colors.accent : '#fff';
+  const fg = tone === 'primary' ? '#000' : tone === 'danger' ? colors.danger : colors.text;
   return (
     <Pressable
       accessibilityRole="button"

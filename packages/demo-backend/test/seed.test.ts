@@ -19,7 +19,12 @@ describe('demo sample data', () => {
     const statuses = db.list('deliveries').map(([, d]) => d.status);
     expect(statuses).toContain('out_for_delivery');
     expect(statuses).toContain('awaiting_assignment');
-    expect(statuses).toContain('at_origin_hub');
+    for (const st of ['awaiting_assignment', 'assigned', 'picked_up', 'at_destination_hub', 'out_for_delivery', 'delivered']) expect(statuses).toContain(st);
+    // Every same-city order goes through the warehouse: a pickup rider, then a delivery rider.
+    const done = db.list('deliveries').map(([, d]) => d as { status: string; legs: { type: string; driverUid: string | null }[] }).filter((d) => d.status === 'delivered');
+    for (const d of done) expect(d.legs.map((l) => l.type)).toEqual(['first_mile', 'last_mile']);
+    expect(new Set(done.map((d) => d.legs[0]!.driverUid))).toEqual(new Set(['d_kwame']));
+    expect(db.get('drivers/d_esi')).toMatchObject({ riderType: 'delivery' });
     expect((db.get('routePlans/d_kwame') as { stops: unknown[] }).stops.length).toBeGreaterThan(1);
 
     for (const period of [new Date().toISOString().slice(0, 7), new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() - 1, 1)).toISOString().slice(0, 7)]) {
@@ -46,9 +51,9 @@ describe('demo sample data', () => {
     await withClock(tomorrow, async () => {
       expect(Object.keys(allPositions())).toEqual([]);
       await keepDriversOnShift();
-      expect(Object.keys(allPositions()).sort()).toEqual(['d_esi', 'd_kojo', 'd_kwame']);
+      expect(Object.keys(allPositions()).sort()).toEqual(['d_abena', 'd_esi', 'd_kojo', 'd_kwame']);
     });
-    expect(['d_kwame', 'd_esi', 'd_kojo'].every(onShift)).toBe(true);
+    expect(['d_kwame', 'd_esi', 'd_kojo', 'd_abena'].every(onShift)).toBe(true);
     expect(onShift('d_yaw')).toBe(false); // was never on shift in the sample data
   });
 });

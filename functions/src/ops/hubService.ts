@@ -14,8 +14,8 @@ import { AppError } from '../lib/errors.js';
 import { decideAddToManifest, decideHubHandover, decideHubReceive, decideManifestAction, decideRemoveFromManifest } from './hubDecisions.js';
 import type { OpsDeps } from './opsService.js';
 
-export const HUB_ROLES: Role[] = ['hub_operator', 'dispatcher', 'admin', 'super_admin'];
-const NETWORK_ROLES: Role[] = ['admin', 'super_admin'];
+export const HUB_ROLES: Role[] = ['hub_operator', 'dispatcher', 'manager', 'admin', 'super_admin'];
+const NETWORK_ROLES: Role[] = ['manager', 'admin', 'super_admin'];
 
 function parse<T>(schema: { safeParse(v: unknown): { success: true; data: T } | { success: false; error: import('zod').ZodError } }, raw: unknown, msg = 'Invalid request.'): T {
   const r = schema.safeParse(raw);

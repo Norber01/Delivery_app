@@ -28,8 +28,8 @@ export interface BusinessDeps {
 }
 
 const BUSINESS_ROLES: Role[] = ['business_owner', 'business_staff'];
-const REVIEW_ROLES: Role[] = ['admin', 'super_admin'];
-const CREDIT_ROLES: Role[] = ['finance', 'admin', 'super_admin'];
+const REVIEW_ROLES: Role[] = ['manager', 'admin', 'super_admin'];
+const CREDIT_ROLES: Role[] = ['finance', 'manager', 'admin', 'super_admin'];
 
 function parse<T>(schema: { safeParse(v: unknown): { success: true; data: T } | { success: false; error: import('zod').ZodError } }, raw: unknown, msg = 'Please check the highlighted fields.'): T {
   const r = schema.safeParse(raw);

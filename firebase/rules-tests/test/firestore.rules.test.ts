@@ -291,6 +291,16 @@ describe('Phase 6: routes, fleet, expenses, driver pay', () => {
     for (const path of ['expenses/e1', 'maintenance/m1', 'reports/finance-2026-11', 'config/pricing']) await assertFails(getDoc(doc(kwame(), path)));
   });
 
+  it('the manager sees everything (with MFA) but writes nothing directly', async () => {
+    const mgr = () => as('m', { role: 'manager', ...mfa });
+    for (const path of ['routePlans/kwame', 'shifts/sh1', 'fuelLogs/f1', 'maintenance/m1', 'expenses/e1', 'driverPayments/2026-11_kwame', 'driverCash/kwame', 'cashRemittances/r1', 'reports/finance-2026-11']) {
+      await assertSucceeds(getDoc(doc(mgr(), path)));
+    }
+    await assertFails(getDoc(doc(as('m', { role: 'manager' }), 'expenses/e1'))); // no second factor
+    await assertFails(setDoc(doc(mgr(), 'expenses/e2'), { amountPesewas: 1 }));
+    await assertFails(updateDoc(doc(mgr(), 'driverCash/kwame'), { remittedPesewas: 500 }));
+  });
+
   it('staff see what their role needs; finance figures need an MFA session', async () => {
     await assertSucceeds(getDoc(doc(disp(), 'routePlans/kwame')));
     await assertFails(getDoc(doc(disp(), 'expenses/e1')));

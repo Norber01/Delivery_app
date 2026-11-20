@@ -25,7 +25,7 @@ export const PAYMENT_RECORD_LABEL: Record<PaymentRecordStatus, string> = {
 };
 
 export const PAYMENT_PREFERENCE_LABEL: Record<PaymentPreference, string> = {
-  cash_on_pickup: 'Pay the driver at pickup',
+  cash_on_pickup: 'Pay the rider at pickup',
   mobile_money: 'Mobile Money (online)',
   card: 'Card (online)',
   business_invoice: 'Business invoice',

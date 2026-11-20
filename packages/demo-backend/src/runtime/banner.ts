@@ -66,7 +66,10 @@ export function mountBanner() {
   );
   root.append(bar, panel);
   document.body.prepend(root);
-  const pad = () => (document.body.style.paddingTop = `${bar.offsetHeight}px`);
+  const pad = () => {
+    document.body.style.paddingTop = `${bar.offsetHeight}px`;
+    document.documentElement.style.setProperty("--demo-bar", `${bar.offsetHeight}px`);
+  };
   pad();
   new ResizeObserver(pad).observe(bar);
 

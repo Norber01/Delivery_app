@@ -30,7 +30,7 @@ export function JobsScreen({ driver, onOpen, onFuel, onPay }: { driver: DriverDo
     <ScrollView style={s.screen} contentContainerStyle={s.content}>
       <View style={s.row}>
         <Text style={[s.h1, { flex: 1 }]}>My jobs</Text>
-        <Text style={s.muted}>{driver.currentShift?.vehicleClass} · on shift</Text>
+        <Text style={s.muted}>{driver.riderType === 'pickup' ? 'Pickup rider' : driver.riderType === 'delivery' ? 'Delivery rider' : 'Rider'} · {driver.currentShift?.vehicleClass} · on shift</Text>
       </View>
       {queue.pending.length > 0 && (
         <Notice tone="warn">
@@ -99,7 +99,7 @@ export function JobsScreen({ driver, onOpen, onFuel, onPay }: { driver: DriverDo
         <Pressable key={d.id} onPress={() => onOpen(d)} accessibilityRole="button">
           <Card>
             <View style={s.row}>
-              {tab === 'current' && stopOf.get(d.id) != null && <Text style={{ color: '#fff', backgroundColor: '#15803d', borderRadius: 12, minWidth: 24, textAlign: 'center', fontWeight: '700', marginRight: 8 }}>{stopOf.get(d.id)}</Text>}
+              {tab === 'current' && stopOf.get(d.id) != null && <Text style={{ color: '#000', backgroundColor: '#ffd919', borderRadius: 12, minWidth: 24, textAlign: 'center', fontWeight: '700', marginRight: 8 }}>{stopOf.get(d.id)}</Text>}
               <Text style={[s.h2, { flex: 1 }]}>{PUBLIC_STATUS_LABELS[d.status]}</Text>
               {d.urgency !== 'standard' && <Text style={{ color: '#1d4ed8', fontWeight: '700' }}>{d.urgency.replace('_', ' ').toUpperCase()}</Text>}
             </View>

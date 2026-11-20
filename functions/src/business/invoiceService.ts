@@ -7,7 +7,7 @@ import { AppError } from '../lib/errors.js';
 import { callerBusiness } from './businessService.js';
 import type { BusinessStore } from './types.js';
 
-const FINANCE: Role[] = ['finance', 'admin', 'super_admin'];
+const FINANCE: Role[] = ['finance', 'manager', 'admin', 'super_admin'];
 
 export interface InvoiceDeps {
   biz: BusinessStore;

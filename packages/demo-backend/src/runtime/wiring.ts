@@ -15,6 +15,7 @@ import * as bulk from '../../../../functions/src/business/bulkService.js';
 import * as invoices from '../../../../functions/src/business/invoiceService.js';
 import * as fleet from '../../../../functions/src/fleet/fleetService.js';
 import { getFinanceReport } from '../../../../functions/src/fleet/financeService.js';
+import { exportBackup } from '../../../../functions/src/fleet/backupService.js';
 import { planDriverRoute } from '../../../../functions/src/fleet/routeService.js';
 import { createBooking } from '../../../../functions/src/services/bookingService.js';
 import { getQuote } from '../../../../functions/src/services/quoteService.js';
@@ -142,6 +143,7 @@ function build() {
       return { url };
     },
     upsertVehicle: (c, d) => ops.upsertVehicle({ ops: opsStore }, c, d),
+    updateDriver: (c, d) => ops.updateDriver({ ops: opsStore }, c, d),
     createDriverAccount: (c, d) =>
       ops.createDriverAccount(
         { ops: opsStore },
@@ -193,6 +195,7 @@ function build() {
     markDriverPaid: (c, d) => fleet.markDriverPaid(fleetDeps, c, d),
     recordCashRemittance: (c, d) => fleet.recordCashRemittance(fleetDeps, c, d),
     getFinanceReport: (c, d) => getFinanceReport({ fleet: fleetStore, now }, c, d),
+    exportBackup: (c, d) => exportBackup({ fleet: fleetStore, now }, c, d),
   };
 
   // The deployed onBookingWritten trigger: a confirmed booking becomes a delivery.

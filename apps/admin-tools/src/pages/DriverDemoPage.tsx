@@ -7,7 +7,7 @@ import { useQuery } from '../lib/useLive';
 
 /** Provided by the demo runtime (demo builds only). */
 interface DemoApi {
-  drivers: { uid: string; name: string; area: string }[];
+  drivers: { uid: string; name: string; area: string; riderType?: 'pickup' | 'delivery' }[];
   callAs: <T>(uid: string, fn: string, data: unknown) => Promise<T>;
   latestCode: (trackingNumber: string) => string | null;
 }
@@ -26,13 +26,13 @@ export function DriverDemoPage() {
   if (!api) return <p className="p-8 text-slate-600">This page only exists in the demo.</p>;
   return (
     <main className="mx-auto max-w-md space-y-4 p-4">
-      <div className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
-        Demo: this screen stands in for the driver’s Android app. Pick a driver and walk a parcel through pickup and delivery — the website’s tracking page and the dispatch board update live.
+      <div className="rounded-2xl bg-brand-50 p-3 text-sm">
+        Demo: this screen stands in for the riders’ Android app. Pick a rider and walk a parcel through: the pickup rider brings it to the warehouse, the delivery rider takes it to the recipient. The website and the Orders board update live.
       </div>
-      <label className="block text-sm">
-        Driver
+      <label className="block text-sm font-medium">
+        Rider
         <select className="input mt-1" value={uid} onChange={(e) => setUid(e.target.value)} aria-label="Driver">
-          {api.drivers.map((d) => <option key={d.uid} value={d.uid}>{d.name} ({d.area})</option>)}
+          {api.drivers.map((d) => <option key={d.uid} value={d.uid}>{d.name} — {d.riderType === 'pickup' ? 'pickup rider' : d.riderType === 'delivery' ? 'delivery rider' : 'rider'} ({d.area})</option>)}
         </select>
       </label>
       {uid && <DriverPhone key={uid} uid={uid} api={api} />}
@@ -73,10 +73,13 @@ function DriverPhone({ uid, api }: { uid: string; api: DemoApi }) {
   const sorted = [...jobs.data].sort((a, b) => (order.get(a.id) ?? 99) - (order.get(b.id) ?? 99));
 
   return (
-    <section className="space-y-3 rounded-2xl border-4 border-slate-800 bg-white p-4 shadow-lg" aria-label="Driver phone">
-      <header className="flex items-center justify-between">
-        <h1 className="text-lg font-bold">{driver?.name ?? '…'}</h1>
-        <span className={`rounded px-2 py-0.5 text-xs font-semibold ${onShift ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-600'}`}>{onShift ? `On shift · ${driver?.currentShift?.vehicleClass}` : 'Off shift'}</span>
+    <section className="space-y-3 rounded-[2rem] border-[6px] border-black bg-page p-4 shadow-xl" aria-label="Driver phone">
+      <header className="flex items-center justify-between gap-2">
+        <div>
+          <h1 className="text-lg font-extrabold">{driver?.name ?? '…'}</h1>
+          {driver?.riderType && <p className="text-xs font-semibold text-slate-500">{driver.riderType === 'pickup' ? 'Pickup rider' : 'Delivery rider'}</p>}
+        </div>
+        <span className={`chip ${onShift ? 'bg-emerald-100 text-emerald-800' : 'bg-white text-slate-600'}`}>{onShift ? `On shift · ${driver?.currentShift?.vehicleClass}` : 'Off shift'}</span>
       </header>
       {msg && <p role="status" className={`text-sm ${msg.ok ? 'text-green-700' : 'text-red-700'}`}>{msg.text}</p>}
       {!onShift ? (
@@ -97,7 +100,7 @@ function DriverPhone({ uid, api }: { uid: string; api: DemoApi }) {
               {plan ? `Re-plan my route (${plan.travelMinutes} min now)` : 'Plan my route'}
             </button>
           )}
-          {sorted.length === 0 && <p className="text-sm text-slate-500">No jobs. Assign one from Dispatch.</p>}
+          {sorted.length === 0 && <p className="rounded-2xl bg-white p-4 text-center text-sm text-slate-500">No jobs right now. Dispatch assigns them on the Orders screen.</p>}
           {sorted.map((d) => <Job key={d.id} d={d} seq={order.get(d.id)} code={api.latestCode(d.trackingNumber)} busy={busy} act={act} />)}
           <div className="space-y-2 border-t border-slate-100 pt-3 text-sm">
             <label className="block">Odometer at end of shift (km)<input className="input mt-1" inputMode="numeric" value={odo} onChange={(e) => setOdo(e.target.value)} /></label>
@@ -112,28 +115,39 @@ function DriverPhone({ uid, api }: { uid: string; api: DemoApi }) {
 function Job({ d, seq, code, busy, act }: { d: DeliveryDoc; seq?: number; code: string | null; busy: boolean; act: (d: DeliveryDoc, type: string, extra: Record<string, unknown>, ok: string) => void }) {
   const [otp, setOtp] = useState('');
   const [name, setName] = useState(d.recipient.name);
-  const toHub = d.legs.find((l) => l.id === d.currentLegId)?.type === 'first_mile';
+  const leg = d.legs.find((l) => l.id === d.currentLegId)?.type;
+  const toHub = leg === 'first_mile';
+  const fromWarehouse = leg === 'last_mile';
   return (
-    <article className="space-y-2 rounded-lg border border-slate-200 p-3 text-sm" aria-label={`Job ${d.trackingNumber}`}>
+    <article className="space-y-2 rounded-2xl bg-white p-4 text-sm shadow-sm" aria-label={`Job ${d.trackingNumber}`}>
       <div className="flex items-center gap-2">
-        {seq && <span className="h-6 w-6 rounded-full bg-brand-600 text-center text-xs leading-6 text-white">{seq}</span>}
+        {seq && <span className="h-6 w-6 rounded-full bg-accent-400 text-center text-xs font-bold leading-6 text-black">{seq}</span>}
         <span className="font-semibold">{PUBLIC_STATUS_LABELS[d.status]}</span>
         <span className="ml-auto font-mono text-xs text-slate-500">{d.trackingNumber}</span>
       </div>
-      <p>From {d.pickup.line1}, {d.pickup.city} → {toHub && d.originHub ? d.originHub.name : `${d.destination.line1}, ${d.destination.city}`}</p>
-      {(d.status === 'assigned') && <button className="btn-primary w-full" disabled={busy} onClick={() => act(d, 'start_assignment', {}, 'On the way to the pickup.')}>Start — go to pickup</button>}
+      {fromWarehouse ? (
+        <p>
+          Collect at <strong>{d.destinationHub?.name}</strong> → deliver to {d.recipient.name}, {d.destination.line1}
+        </p>
+      ) : (
+        <p>
+          Pick up from {d.sender.name}, {d.pickup.line1} → {toHub && d.originHub ? <strong>{d.originHub.name}</strong> : `${d.destination.line1}`}
+        </p>
+      )}
+      {(d.status === 'assigned') && <button className="btn-accent w-full" disabled={busy} onClick={() => act(d, 'start_assignment', {}, 'On the way to the pickup.')}>Start — go to pickup</button>}
+      {d.status === 'at_destination_hub' && <p className="rounded-xl bg-field px-3 py-2 text-slate-700">Go to {d.destinationHub?.name}. Warehouse staff scan the parcel to you (ops app → Warehouse → Give to rider).</p>}
       {d.status === 'en_route_to_pickup' && (
-        <button className="btn-primary w-full" disabled={busy} onClick={() => act(d, 'confirm_pickup', { scannedCode: d.trackingNumber, cashCollected: d.collectOnPickupPesewas > 0 }, 'Collected.')}>
+        <button className="btn-accent w-full" disabled={busy} onClick={() => act(d, 'confirm_pickup', { scannedCode: d.trackingNumber, cashCollected: d.collectOnPickupPesewas > 0 }, 'Collected.')}>
           Scan label & collect{d.collectOnPickupPesewas > 0 ? ` (take ${formatGhs(d.collectOnPickupPesewas)} cash)` : ''}
         </button>
       )}
-      {d.status === 'picked_up' && toHub && <p className="text-slate-600">Take it to {d.originHub?.name}. Hub staff scan it in (ops app → Hub).</p>}
+      {d.status === 'picked_up' && toHub && <p className="rounded-xl bg-field px-3 py-2 text-slate-700">Take it to {d.originHub?.name}. Warehouse staff scan it in (ops app → Warehouse → Receive).</p>}
       {d.status === 'out_for_delivery' && (
         <div className="space-y-2">
           <p className="text-slate-600">Ask the recipient for the code they received by SMS{code ? ` — in the demo it is ${code}` : ''}.</p>
           <input className="input" placeholder="6-digit code" aria-label="Delivery code" inputMode="numeric" value={otp} onChange={(e) => setOtp(e.target.value)} />
           <input className="input" placeholder="Received by" aria-label="Received by" value={name} onChange={(e) => setName(e.target.value)} />
-          <button className="btn-primary w-full" disabled={busy} onClick={() => act(d, 'complete_delivery', { otp, receivedByName: name }, 'Delivered.')}>Complete delivery</button>
+          <button className="btn-accent w-full" disabled={busy} onClick={() => act(d, 'complete_delivery', { otp, receivedByName: name }, 'Delivered.')}>Complete delivery</button>
         </div>
       )}
     </article>
