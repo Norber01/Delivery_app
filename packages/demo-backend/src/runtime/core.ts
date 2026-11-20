@@ -5,7 +5,22 @@
 import { setDemoDb } from '../admin/firestore.js';
 import { DemoDb } from '../db/store.js';
 
-export const STORAGE_KEY = 'courier-demo-v1';
+/** Bump when the sample data changes shape: browsers holding an older copy start fresh. */
+export const STORAGE_KEY = 'courier-demo-v2';
+
+function dropOldCopies() {
+  try {
+    for (const k of Object.keys(localStorage)) {
+      // Older sample databases, and sign-ins that may name people who no longer exist.
+      if (/^courier-demo-v\d+$/.test(k) && k !== STORAGE_KEY) {
+        localStorage.removeItem(k);
+        for (const s of Object.keys(localStorage)) if (s.startsWith('courier-demo-session')) localStorage.removeItem(s);
+      }
+    }
+  } catch {
+    /* storage blocked: nothing saved anyway */
+  }
+}
 /** Demo clock offset: lets the seed run "in the past" through the real services. */
 let clockOverride: Date | null = null;
 export const demoNow = () => clockOverride ?? new Date();
@@ -19,6 +34,7 @@ export function withClock<T>(at: Date, fn: () => Promise<T>): Promise<T> {
 let db: DemoDb | null = null;
 export function theDb(): DemoDb {
   if (!db) {
+    if (typeof localStorage !== 'undefined') dropOldCopies();
     db = new DemoDb({ storageKey: typeof localStorage === 'undefined' ? undefined : STORAGE_KEY, now: demoNow });
     setDemoDb(db);
     db.load();
